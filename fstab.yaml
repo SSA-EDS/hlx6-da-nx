@@ -1,0 +1,4 @@
+mountpoints:
+  /:
+    url: https://content.ent-da.live/ssa-eds/da-nx-ams-1128-west/
+    type: markup
