@@ -1,4 +1,4 @@
 mountpoints:
   /:
-    url: https://content.ent-da.live/ssa-eds/da-nx-ams-1128-west/
+    url: https://content.entmseds-da.live/ssa-eds/hlx6-da-nx/
     type: markup
