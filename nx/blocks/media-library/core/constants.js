@@ -35,9 +35,9 @@ export const MediaType = Object.freeze({
   LINK: 'link',
 });
 
-const AEM_PAGE = '.aem.page';
-const AEM_LIVE = '.aem.live';
-const PREVIEW_DA_LIVE = '.preview.da.live';
+const AEM_PAGE = '.entmseds.page';
+const AEM_LIVE = '.entmseds.live';
+const PREVIEW_DA_LIVE = '.preview.entmseds-da.live';
 
 export const Domains = Object.freeze({
   AEM_PAGE,
@@ -74,7 +74,7 @@ export const Storage = Object.freeze({
   DA_CONTENT: 'da-content',
 });
 
-export const DA_LIVE_EDIT_BASE = 'https://da.live/edit#/';
+export const DA_LIVE_EDIT_BASE = 'https://entmseds-da.live/edit#/';
 export const MEDIA_UNDERSCORE_PREFIX = 'media_';
 export const YOUTUBE_VIDEO_RE = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)([^&\n?#/]+)|youtu\.be\/([^&\n?#/]+))/;
 export const VIMEO_VIDEO_RE = /(?:player\.)?vimeo\.com\/(?:video\/)?(\d+)(?:$|[/?#])/;
@@ -118,8 +118,8 @@ export const ExternalMedia = Object.freeze({
 
 const DA_ADMIN_ENVS = {
   local: 'http://localhost:8787',
-  stage: 'https://stage-admin.da.live',
-  prod: 'https://admin.da.live',
+  stage: 'https://stage-admin.entmseds-da.live',
+  prod: 'https://admin.entmseds-da.live',
 };
 
 const DA_ETC_ENVS = {
@@ -150,7 +150,7 @@ export function resolveDaOrigin(location) {
 
   const env = (typeof localStorage !== 'undefined' && localStorage.getItem('da-admin')) || 'prod';
   const daOrigin = DA_ADMIN_ENVS[env] || DA_ADMIN_ENVS.prod;
-  return origin === 'https://da.page' ? daOrigin.replace('.live', '.page') : daOrigin;
+  return origin === 'https://entmseds-da.page' ? daOrigin.replace('.live', '.page') : daOrigin;
 }
 
 /**
@@ -179,7 +179,7 @@ export function resolveDaEtcOrigin(location) {
  * @returns {string}
  */
 export function resolveAemOrigin() {
-  return 'https://admin.hlx.page';
+  return 'https://admin.entmseds.page';
 }
 
 // Main-thread convenience exports (use window.location)

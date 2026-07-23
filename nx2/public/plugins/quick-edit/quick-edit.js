@@ -48,8 +48,8 @@ function handleLoad(target, config, location, ctx) {
 function getQuickEditSrc() {
   const { search } = window.location;
   const ref = new URLSearchParams(search).get('quick-edit');
-  if (!ref || ref === 'on') return 'https://da.live/plugins/quick-edit';
-  return `https://main--da-live--adobe.aem.live/plugins/quick-edit?nx=${ref}`;
+  if (!ref || ref === 'on') return 'https://entmseds-da.live/plugins/quick-edit';
+  return `https://main--hlx6-da-live--ssa-eds.entmseds.live/plugins/quick-edit?nx=${ref}`;
 }
 
 export default async function loadQuickEdit({ detail: payload }, loadPage) {

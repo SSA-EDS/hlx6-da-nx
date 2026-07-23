@@ -18,26 +18,26 @@ const DA_DEFAULT_ENV = env === 'dev' ? 'stage' : env;
 
 const DA_ADMIN_ENVS = {
   dev: 'http://localhost:8787',
-  stage: 'https://stage-admin.ent-da.live',
-  prod: 'https://admin.ent-da.live',
+  stage: 'https://stage-admin.entmseds-da.live',
+  prod: 'https://admin.entmseds-da.live',
 };
 
 const DA_COLLAB_ENVS = {
   dev: 'ws://localhost:4711',
-  stage: 'wss://stage-collab.ent-da.live',
-  prod: 'wss://collab.ent-da.live',
+  stage: 'wss://stage-collab.entmseds-da.live',
+  prod: 'wss://collab.entmseds-da.live',
 };
 
 const DA_CONTENT_ENVS = {
   dev: 'http://localhost:8788',
-  stage: 'https://stage-content.ent-da.live',
-  prod: 'https://content.ent-da.live',
+  stage: 'https://stage-content.entmseds-da.live',
+  prod: 'https://content.entmseds-da.live',
 };
 
 const DA_LIVE_PREVIEW_ENVS = {
   dev: 'https://localhost:8000',
-  stage: 'https://stage-preview.ent-da.live',
-  prod: 'https://preview.ent-da.live',
+  stage: 'https://stage-preview.entmseds-da.live',
+  prod: 'https://preview.entmseds-da.live',
 };
 
 const DA_ETC_ENVS = {
@@ -63,8 +63,8 @@ export const DA_CONTENT = getEnv('da-content', DA_CONTENT_ENVS);
 export const DA_PREVIEW = getEnv('da-preview', DA_LIVE_PREVIEW_ENVS);
 export const DA_ETC = getEnv('da-etc', DA_ETC_ENVS);
 
-export const HLX_ADMIN = 'https://admin.ent-aem.page';
-export const AEM_API = 'https://api.ent-aem.live';
+export const HLX_ADMIN = 'https://admin.entmseds.page';
+export const AEM_API = 'https://api.entmseds.live';
 
 export const ALLOWED_TOKEN = [
   DA_ADMIN,

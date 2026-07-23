@@ -7,8 +7,8 @@ const previewPreferredMediaKeys = new Set();
 function toAemRuntimeHostname(hostname) {
   if (!hostname) return hostname;
   return hostname
-    .replace('.hlx.page', Domains.AEM_PAGE)
-    .replace('.hlx.live', Domains.AEM_LIVE);
+    .replace('.entmseds.page', Domains.AEM_PAGE)
+    .replace('.entmseds.live', Domains.AEM_LIVE);
 }
 
 function isMediaHashPath(pathname = '') {
@@ -102,16 +102,16 @@ function getDefaultPreviewRuntimeHostUrl(org, repo) {
 
 function applyDefaultLiveHost(hostname) {
   return hostname
-    .replace('.hlx.page', Domains.AEM_LIVE)
-    .replace('.aem.page', Domains.AEM_LIVE)
-    .replace('.hlx.live', Domains.AEM_LIVE);
+    .replace('.entmseds.page', Domains.AEM_LIVE)
+    .replace('.entmseds.page', Domains.AEM_LIVE)
+    .replace('.entmseds.live', Domains.AEM_LIVE);
 }
 
 function applyDefaultPreviewHost(hostname) {
   return hostname
-    .replace('.hlx.page', Domains.AEM_PAGE)
-    .replace('.aem.live', Domains.AEM_PAGE)
-    .replace('.hlx.live', Domains.AEM_PAGE);
+    .replace('.entmseds.page', Domains.AEM_PAGE)
+    .replace('.entmseds.live', Domains.AEM_PAGE)
+    .replace('.entmseds.live', Domains.AEM_PAGE);
 }
 
 function getMediaIdentityKey(mediaUrl) {
