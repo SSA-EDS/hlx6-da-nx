@@ -18,7 +18,7 @@ const branch = searchParams.get('nx') || 'main';
 // shared and imslib bootstraps once.
 export const EXP_SRC = branch === 'main'
   ? 'https://entmseds-da.live/plugins/exp?nxver=2'
-  : `https://main--da-live--adobe.entmseds.live/plugins/exp?nx=${branch}&nxver=2`;
+  : `https://main--hlx6-da-live--ssa-eds.entmseds.live/plugins/exp?nx=${branch}&nxver=2`;
 
 const MAIN_SELECTOR = 'aem-sidekick-exp';
 
