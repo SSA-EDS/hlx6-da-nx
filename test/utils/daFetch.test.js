@@ -22,26 +22,26 @@ describe('replaceHtml', () => {
       const text = '<img src="./media/image.png"> <a href="/foo">link</a>';
       const out = replaceHtml(text);
       expect(out).to.include('<main><img src="./media/image.png"> <a href="/foo">link</a></main>');
-      expect(out).not.to.include('aem.live');
+      expect(out).not.to.include('entmseds.live');
     });
 
     it('does not replace when only fromOrg is set', () => {
       const text = '<img src="./media/image.png"> <a href="/bar">link</a>';
       expect(replaceHtml(text, 'myorg', null)).to.include(`<main>${text}</main>`);
       expect(replaceHtml(text, 'myorg', undefined)).to.include(`<main>${text}</main>`);
-      expect(replaceHtml(text, 'myorg', null)).not.to.include('aem.live');
+      expect(replaceHtml(text, 'myorg', null)).not.to.include('entmseds.live');
     });
 
     it('does not replace when only fromRepo is set', () => {
       const text = '<img src="./media/image.png"> <a href="/baz">link</a>';
       expect(replaceHtml(text, null, 'myrepo')).to.include(`<main>${text}</main>`);
       expect(replaceHtml(text, '', 'myrepo')).to.include(`<main>${text}</main>`);
-      expect(replaceHtml(text, null, 'myrepo')).not.to.include('aem.live');
+      expect(replaceHtml(text, null, 'myrepo')).not.to.include('entmseds.live');
     });
   });
 
   describe('when fromOrg and fromRepo are set', () => {
-    const origin = 'https://main--myrepo--myorg.aem.live';
+    const origin = 'https://main--myrepo--myorg.entmseds.live';
 
     it('replaces ./media in img src with origin-prefixed /media', () => {
       const out = replaceHtml('<img src="./media/image.png">', 'myorg', 'myrepo');
@@ -104,7 +104,7 @@ describe('replaceHtml', () => {
       const out = replaceHtml('<img src="./media/img.png">', 'org', 'repo', { daMetadata: { key: 'val' } });
       expect(out).to.include('class="da-metadata"');
       expect(out).to.include('<div>key</div><div>val</div>');
-      expect(out).to.include('https://main--repo--org.aem.live/media/img.png');
+      expect(out).to.include('https://main--repo--org.entmseds.live/media/img.png');
     });
 
     it('extracts .text when metadata value is a getElementMetadata { content, text } object', () => {
@@ -138,7 +138,7 @@ describe('replaceHtml', () => {
   });
 
   describe('replaceRelative option', () => {
-    const origin = 'https://main--myrepo--myorg.aem.live';
+    const origin = 'https://main--myrepo--myorg.entmseds.live';
 
     it('replaces relative paths by default (replaceRelative not specified)', () => {
       const text = '<img src="./media/img.png"> <a href="/page">Link</a>';
@@ -158,7 +158,7 @@ describe('replaceHtml', () => {
       const text = '<img src="./media/img.png"> <a href="/page">Link</a>';
       const out = replaceHtml(text, 'myorg', 'myrepo', { replaceRelative: false });
       expect(out).to.include('<main><img src="./media/img.png"> <a href="/page">Link</a></main>');
-      expect(out).not.to.include('aem.live');
+      expect(out).not.to.include('entmseds.live');
     });
 
     it('preserves relative paths but still adds metadata when replaceRelative is false', () => {
@@ -168,7 +168,7 @@ describe('replaceHtml', () => {
         daMetadata: { key: 'value' },
       });
       expect(out).to.include('<main><img src="./media/img.png"></main>');
-      expect(out).not.to.include('aem.live');
+      expect(out).not.to.include('entmseds.live');
       expect(out).to.include('class="da-metadata"');
       expect(out).to.include('<div>key</div><div>value</div>');
     });
@@ -177,7 +177,7 @@ describe('replaceHtml', () => {
       const text = '<img src="./media/img.png">';
       const out = replaceHtml(text, null, null, { replaceRelative: true });
       expect(out).to.include('<main><img src="./media/img.png"></main>');
-      expect(out).not.to.include('aem.live');
+      expect(out).not.to.include('entmseds.live');
     });
   });
 });

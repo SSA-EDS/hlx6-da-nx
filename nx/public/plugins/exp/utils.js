@@ -1,6 +1,6 @@
 import { getMetadata } from '../../../scripts/nexter.js';
 
-const MOCK_ORIGIN = 'https://main--da-block-collection--aemsites.aem.page';
+const MOCK_ORIGIN = 'https://main--da-block-collection--aemsites.entmseds.page';
 
 export function calcOrigin() {
   const { origin: ogOrigin } = window.location;

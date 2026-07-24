@@ -85,8 +85,11 @@ class NxImporter extends LitElement {
     this._urls = [];
 
     if (data.index) {
-      const opts = getOptions();
-      const { origin } = new URL(data.index);
+      const indexUrl = new URL(data.index);
+      const { origin } = indexUrl;
+      // Parse source org/repo from the query index URL hostname
+      const [fromRepo, fromOrg] = indexUrl.hostname.split('.')[0].split('--').slice(1).slice(-2);
+      const opts = await getOptions(fromOrg, fromRepo);
       const proxyUrl = `https://da-etc.adobeaem.workers.dev/cors?url=${encodeURIComponent(data.index)}`;
       const resp = await fetch(proxyUrl, opts);
       if (!resp.ok) this.setStatus('Query Index could not be downloaded. CORs error?');
@@ -229,7 +232,7 @@ class NxImporter extends LitElement {
         <div class="form-row">
           <h2>Import</h2>
           <label for="index">By Query Index</label>
-          <sl-input id="index" type="text" name="index" placeholder="https://main--bacom--adobecom.hlx.live/query-index.json?limit=-1"></sl-input>
+          <sl-input id="index" type="text" name="index" placeholder="https://main--bacom--adobecom.entmseds.live/query-index.json?limit=-1"></sl-input>
           <label for="urls">By URL</label>
           <sl-textarea id="urls" name="urls" placeholder="Add AEM URLs"></sl-textarea>
         </div>

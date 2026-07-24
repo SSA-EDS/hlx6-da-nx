@@ -1,9 +1,10 @@
 import { handleSignIn, loadIms } from '../../../utils/ims.js';
+import { MESSAGE_TYPES } from '../../../utils/message-types.js';
 
 const DA_LIVE_PREVIEW_ENVS = {
   local: 'localhost:8000',
-  stage: 'stage-preview.da.live',
-  prod: 'preview.da.live',
+  stage: 'stage-preview.entmseds-da.live',
+  prod: 'preview.entmseds-da.live',
 };
 
 export async function getToken() {
@@ -22,7 +23,7 @@ function getLivePreviewDomain() {
     localStorage.setItem('da-live-preview', query);
   }
   const env = DA_LIVE_PREVIEW_ENVS[localStorage.getItem('da-live-preview') || 'prod'];
-  return window.location.origin === 'https://da.page' ? env.replace('.live', '.page') : env;
+  return window.location.origin === 'https://entmseds-da.page' ? env.replace('.live', '.page') : env;
 }
 
 function getLivePreviewUrl(owner, repo) {
@@ -271,14 +272,17 @@ export async function signIn() {
 
 export async function handlePreview(ctx) {
   const path = ctx.path.endsWith('/') ? `${ctx.path}index` : `${ctx.path}`;
-  const url = `https://admin.hlx.page/preview/${ctx.owner}/${ctx.repo}/main${path}`;
+  const url = `https://admin.entmseds.page/preview/${ctx.owner}/${ctx.repo}/main${path}`;
   const token = await getToken();
   const resp = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
   if (!resp.ok) {
     // eslint-disable-next-line no-console
     console.error('Failed to preview:', resp.statusText);
-    ctx.port.postMessage({ type: 'preview', ok: false, error: `Failed to preview: ${resp.statusText}` });
+    const error = `Failed to preview: ${resp.statusText}`;
+    ctx.port.postMessage({
+      type: MESSAGE_TYPES.PREVIEW, ok: false, error, payload: { ok: false, error },
+    });
   } else {
-    ctx.port.postMessage({ type: 'preview', ok: true });
+    ctx.port.postMessage({ type: MESSAGE_TYPES.PREVIEW, ok: true, payload: { ok: true } });
   }
 }

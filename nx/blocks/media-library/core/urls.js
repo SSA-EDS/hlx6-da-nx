@@ -179,7 +179,7 @@ export function setMediaHashRuntimeHosts(
   _ = '',
 ) {
   // Always use previewHost for media-hash URLs, never the production host
-  // Media-hash files on .aem.page match the audit log content
+  // Media-hash files on .entmseds.page match the audit log content
   mediaHashRuntimeHostUrl = parseRuntimeHostUrl(previewHostValue)
     || getDefaultPreviewRuntimeHostUrl(org, repo);
 
@@ -211,13 +211,13 @@ export function isPreviewPreferredForMediaUrl(mediaUrl) {
 function hlxToAemHost(hostname) {
   if (!hostname) return '';
   return hostname
-    .replace('.hlx.page', Domains.AEM_PAGE)
-    .replace('.hlx.live', Domains.AEM_LIVE);
+    .replace('.entmseds.page', Domains.AEM_PAGE)
+    .replace('.entmseds.live', Domains.AEM_LIVE);
 }
 
 function matchesRepoDeliveryHost(hostname, org, repo) {
   const h = hlxToAemHost(hostname);
-  return h === `main--${repo}--${org}.aem.page` || h === `main--${repo}--${org}.aem.live`;
+  return h === `main--${repo}--${org}.entmseds.page` || h === `main--${repo}--${org}.entmseds.live`;
 }
 
 /**
@@ -251,8 +251,8 @@ export function isInternalToSite(urlString, org, repo) {
   try {
     const url = new URL(urlString);
 
-    const isAemDomain = url.hostname === `main--${repo}--${org}.aem.page`
-        || url.hostname === `main--${repo}--${org}.aem.live`;
+    const isAemDomain = url.hostname === `main--${repo}--${org}.entmseds.page`
+        || url.hostname === `main--${repo}--${org}.entmseds.live`;
 
     const hasOrgRepoPath = url.pathname.startsWith(`/${org}/${repo}/`);
 
@@ -400,7 +400,7 @@ export function parseOrgRepoFromUrl(siteUrl) {
     const url = new URL(siteUrl);
     const { hostname, pathname } = url;
 
-    const match = hostname.match(/^main--(.+?)--([^.]+)\.aem\.page$/);
+    const match = hostname.match(/^main--(.+?)--([^.]+)\.entmseds\.page$/);
 
     if (match) {
       const [, repo, org] = match;
@@ -410,7 +410,7 @@ export function parseOrgRepoFromUrl(siteUrl) {
 
     throw new Error(`Unable to parse AEM URL format from: ${siteUrl}`);
   } catch (e) {
-    throw new Error(`Invalid URL format: ${siteUrl}. Expected format: https://main--site--org.aem.page`);
+    throw new Error(`Invalid URL format: ${siteUrl}. Expected format: https://main--site--org.entmseds.page`);
   }
 }
 
@@ -449,7 +449,7 @@ export function etcFetch(href, api, options) {
   return fetch(url, opts);
 }
 
-// Preview.da.live URL helper
+// Preview.entmseds-da.live URL helper
 export function getLivePreviewUrl(owner, repo) {
   return `https://main--${repo}--${owner}${Domains.PREVIEW_DA_LIVE}`;
 }

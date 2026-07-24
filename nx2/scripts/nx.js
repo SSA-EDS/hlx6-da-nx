@@ -12,12 +12,12 @@
 
 const LOG = async (ex, el) => (await import('../utils/error.js')).default(ex, el);
 
-const NX_BLOCKS = new Set(['importer']);
+const NX_BLOCKS = new Set(['importer', 'exp', 'site-apps', 'hero', 'card', 'section-metadata', 'schema-editor', 'media-library', 'form', 'secure-org', 'bulk', 'tree', 'permissions', 'snapshot-admin', 'loc']);
 
 const EW_ORIGINS = {
   dev: 'http://localhost:3001',
-  stage: 'https://main--ew-extensions--adobe-rnd.aem.page',
-  prod: 'https://main--ew-extensions--adobe-rnd.aem.live',
+  stage: 'https://main--ew-extensions--adobe-rnd.entmseds.page',
+  prod: 'https://main--ew-extensions--adobe-rnd.entmseds.live',
 };
 
 export function getColorScheme() {
@@ -39,7 +39,7 @@ export function getLocale(locales) {
 
 export const env = (() => {
   const { host } = window.location;
-  if (host.endsWith('.aem.live')) return 'prod';
+  if (host.endsWith('.entmseds.live')) return 'prod';
   if (!['--', 'local'].some((check) => host.includes(check))) return 'prod';
   if (['--'].some((check) => host.includes(check))) return 'stage';
   return 'dev';
@@ -99,7 +99,7 @@ export const [setConfig, getConfig] = (() => {
 export const loc = ([first], ...values) => {
   const key = values.length ? values[0] : first;
   const { strings } = getConfig();
-  return strings.get(key) ?? key;
+  return strings?.get(key) ?? key;
 };
 
 export async function loadBlock(block) {
@@ -325,6 +325,7 @@ export async function loadArea({ area } = { area: document }) {
 
       if (!isSession) loadSession();
       import('../utils/favicon.js');
+      import('../utils/org-check.js');
     }
   }
 

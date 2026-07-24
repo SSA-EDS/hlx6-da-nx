@@ -10,7 +10,7 @@
   text-decoration: none;
   display: flex;
   gap: 8px;
-  color: #000;
+  color: var(--s2-gray-900);
   z-index: 1;
 
   &::after {
@@ -18,7 +18,7 @@
     content: "";
     position: absolute;
     inset: -8px;
-    background-color: rgb(255 255 255 / 80%);
+    background-color: var(--s2-gray-25);
     border-radius: 8px;
     z-index: -1;
     opacity: 0;
@@ -33,11 +33,11 @@
     width: 33.33px;
     height: 32px;
     border-radius: 5px;
-    background-color: #959595;
+    background-color: var(--s2-gray-500);
     flex: 0 0 auto;
 
     &.is-active {
-      background-color: rgb(250 15 0);
+      background-color: var(--s2-red-900);
     }
   }
 
@@ -58,7 +58,7 @@
 }
 
 .edit-icon {
-  background-image: url("https://da.live/nx/public/icons/white/S2_Icon_Edit_20_N.svg");
+  background-image: url("https://entmseds-da.live/nx/public/icons/white/S2_Icon_Edit_20_N.svg");
   background-size: 20px;
   background-position: 50%;
   background-repeat: no-repeat;

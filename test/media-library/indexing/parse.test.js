@@ -33,7 +33,7 @@ describe('parse', () => {
       });
 
       it('does not extract internal AEM URLs', () => {
-        const md = '![Image](https://main--blog--adobe.aem.live/media/image.png)';
+        const md = '![Image](https://main--blog--adobe.entmseds.live/media/image.png)';
         const urls = extractExternalMediaUrls(md, false);
         expect(urls).to.be.empty;
       });
@@ -111,7 +111,7 @@ describe('parse', () => {
       });
 
       it('does not extract internal URLs', () => {
-        const html = '<img src="https://main--blog--adobe.aem.page/media/image.png">';
+        const html = '<img src="https://main--blog--adobe.entmseds.page/media/image.png">';
         const urls = extractExternalMediaUrls(html, true);
         expect(urls).to.be.empty;
       });
@@ -142,7 +142,7 @@ describe('parse', () => {
       });
 
       it('extracts fragments from full URLs', () => {
-        const md = '[Nav](https://main--blog--adobe.aem.page/fragments/nav)';
+        const md = '[Nav](https://main--blog--adobe.entmseds.page/fragments/nav)';
         const refs = extractFragmentReferences(md, false);
         expect(refs).to.include('/fragments/nav');
       });
@@ -208,7 +208,7 @@ describe('parse', () => {
       });
 
       it('converts full URLs to paths', () => {
-        const md = '[Doc](https://main--blog--adobe.aem.page/docs/guide.pdf)';
+        const md = '[Doc](https://main--blog--adobe.entmseds.page/docs/guide.pdf)';
         const links = extractLinks(md, /\.pdf$/, false);
         expect(links).to.include('/docs/guide.pdf');
       });

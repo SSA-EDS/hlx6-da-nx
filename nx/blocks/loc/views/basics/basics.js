@@ -1,11 +1,11 @@
 import { LitElement, html } from 'da-lit';
-import getStyle from '../../../../utils/styles.js';
+import { loadStyle } from '../../../../../nx2/scripts/nx.js';
 import formatBasics from './index.js';
 
-const style = await getStyle(import.meta.url);
+const style = await loadStyle(import.meta.url);
 
 const MOCK_URLS = '';
-// const MOCK_URLS = 'https://main--da-bacom--adobecom.aem.page/drafts/cmillar/loc-test/main-doc';
+// const MOCK_URLS = 'https://main--da-bacom--adobecom.entmseds.page/drafts/cmillar/loc-test/main-doc';
 
 class NxLocBasics extends LitElement {
   static properties = {
@@ -42,7 +42,7 @@ class NxLocBasics extends LitElement {
   }
 
   formatUrls(org, site, urls, snapshot) {
-    const baseUrl = snapshot ? `${snapshot}--main--${site}--${org}.aem.reviews` : `main--${site}--${org}.aem.page`;
+    const baseUrl = snapshot ? `${snapshot}--main--${site}--${org}.aem.reviews` : `main--${site}--${org}.entmseds.page`;
     return urls.map((url) => `https://${baseUrl}${url.suppliedPath}`).join('\n');
   }
 

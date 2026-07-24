@@ -88,7 +88,7 @@ function getRequestPath(a) {
   // If the hostname matches, return the pathname
   if (hostname === window.location.hostname) return pathname;
   // If the aem project matches, make it relative (useful across delivery tiers)
-  const isAem = ['.da.', '.aem.', 'local'].some((host) => hostname.includes(host));
+  const isAem = ['.entmseds-da.', '.entmseds.', 'local'].some((host) => hostname.includes(host));
   if (isAem) {
     // If org and site matches, return the pathname
     const [aemOrg, aemSite] = hostname.split('.')[0].split('--').reverse();

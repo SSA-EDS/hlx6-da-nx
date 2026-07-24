@@ -10,6 +10,7 @@ import './pills/pills.js';
 import { loadSiteConfig } from './utils/api.js';
 import { ADOBE_AI_GUIDELINES_URL, ADD_MENU_ITEMS, MENU_OPTIONS, ROLE, TOOL_STATE } from './constants.js';
 import { getConfig } from '../../scripts/nx.js';
+import { buildAttachmentPayload, buildSlashMessage } from './utils/chat-helpers.js';
 
 const styles = await loadStyle(import.meta.url);
 const { codeBase } = getConfig();
@@ -50,7 +51,16 @@ class NxChat extends LitElement {
     if (key !== undefined) {
       const prevId = this._keyedItemIds.get(key);
       const without = (this._items ?? []).filter((i) => i.id !== prevId);
-      if (item.id) {
+      const matchesPinned = item.id
+        && typeof item.selFrom === 'number'
+        && typeof item.selTo === 'number'
+        && without.some((i) => i.pinned
+          && i.selFrom === item.selFrom
+          && i.selTo === item.selTo);
+      if (matchesPinned) {
+        this._keyedItemIds.delete(key);
+        this._items = without;
+      } else if (item.id) {
         this._keyedItemIds.set(key, item.id);
         this._items = [...without, item];
       } else {
@@ -62,9 +72,13 @@ class NxChat extends LitElement {
     }
   };
 
-  _onSetPrompt = ({ detail }) => {
-    this._sendPrompt(detail.text, { autoSend: detail.autoSend });
-  };
+  setPrompt(text, { autoSend = false } = {}) {
+    if (this.connected) {
+      this._sendPrompt(text, { autoSend });
+    } else {
+      this._pendingPrompt = { text, autoSend };
+    }
+  }
 
   addAttachment(item) {
     const current = this._items ?? [];
@@ -154,13 +168,18 @@ class NxChat extends LitElement {
   _onSlashSelect(skillId) {
     const input = this.shadowRoot?.querySelector('.chat-input');
     const { wordStart } = this._slashCtx ?? {};
-    const before = input?.value.slice(0, wordStart ?? 0).trimEnd();
-    const after = input?.value.slice(input.selectionStart).trimStart();
-    const message = [before, `/${skillId}`, after].filter(Boolean).join(' ');
+    const message = buildSlashMessage(input?.value ?? '', input?.selectionStart ?? 0, wordStart, skillId);
     this._slashCtx = null;
     this._slashMenuEl?.close();
     if (input) input.value = '';
-    this._controller.sendMessage(message, [], { requestedSkills: [skillId] });
+    const items = this._items ?? [];
+    const fileItems = items.filter((item) => item.dataBase64);
+    const contextItems = items.filter((item) => !item.dataBase64);
+    const attachments = buildAttachmentPayload(items);
+    fileItems.forEach((item) => { if (item.thumbnail) URL.revokeObjectURL(item.thumbnail); });
+    const opts = { requestedSkills: [skillId], ...(attachments.length ? { attachments } : {}) };
+    this._controller.sendMessage(message, contextItems, opts);
+    this._items = [];
   }
 
   async connectedCallback() {
@@ -176,12 +195,19 @@ class NxChat extends LitElement {
         }));
       },
       onUpdate: ({ messages, thinking, streamingText, connected, toolCards }) => {
-        this.messages = streamingText
+        const newMessages = streamingText
           ? [...(messages ?? []), { role: ROLE.ASSISTANT, content: streamingText, streaming: true }]
           : messages;
         this.thinking = thinking;
         this.connected = connected;
         this.toolCards = toolCards;
+        cancelAnimationFrame(this._updateRaf);
+        this._updateRaf = requestAnimationFrame(() => {
+          this.messages = newMessages;
+          this.thinking = thinking;
+          this.connected = connected;
+          this.toolCards = toolCards;
+        });
       },
     });
     if (this._context) this._controller.setContext(this._context);
@@ -192,11 +218,11 @@ class NxChat extends LitElement {
 
     this._controller.connect().then(() => this._controller.loadInitialMessages());
     document.addEventListener('nx-add-to-chat', this._onAddToChat);
-    document.addEventListener('nx-set-prompt', this._onSetPrompt);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    cancelAnimationFrame(this._updateRaf);
     (this._items ?? []).forEach((item) => {
       if (item.thumbnail) URL.revokeObjectURL(item.thumbnail);
     });
@@ -204,7 +230,6 @@ class NxChat extends LitElement {
     this._controller?.destroy();
     document.removeEventListener('keydown', this._onApprovalKeydown);
     document.removeEventListener('nx-add-to-chat', this._onAddToChat);
-    document.removeEventListener('nx-set-prompt', this._onSetPrompt);
   }
 
   _pendingApproval() {
@@ -230,10 +255,20 @@ class NxChat extends LitElement {
     }
   };
 
+  willUpdate(changed) {
+    if (changed.has('messages')) {
+      const log = this.shadowRoot?.querySelector('.chat-scroll-container');
+      this._wasNearBottom = !log || (log.scrollHeight - log.scrollTop - log.clientHeight < 50);
+    }
+  }
+
   updated(changed) {
     if (changed.has('messages')) {
       const log = this.shadowRoot.querySelector('.chat-scroll-container');
-      if (log) requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
+      if (log && this._wasNearBottom) {
+        cancelAnimationFrame(this._scrollRaf);
+        this._scrollRaf = requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
+      }
     }
     if (changed.has('thinking') && !this.thinking && changed.get('thinking')) {
       this.shadowRoot.querySelector('.chat-input')?.focus();
@@ -244,6 +279,11 @@ class NxChat extends LitElement {
       } else {
         document.removeEventListener('keydown', this._onApprovalKeydown);
       }
+    }
+    if (changed.has('connected') && this.connected && this._pendingPrompt) {
+      const { text, autoSend } = this._pendingPrompt;
+      this._pendingPrompt = null;
+      this._sendPrompt(text, { autoSend });
     }
   }
 
@@ -309,9 +349,7 @@ class NxChat extends LitElement {
     const fileItems = (this._items ?? []).filter((i) => i.dataBase64);
     const contextItems = (this._items ?? []).filter((i) => !i.dataBase64);
     const message = text || (fileItems.length > 1 ? 'Attached files' : 'Attached file');
-    const attachments = fileItems.map(({ id, fileName, mediaType, sizeBytes, dataBase64 }) => ({
-      id, fileName, mediaType, dataBase64, ...(typeof sizeBytes === 'number' ? { sizeBytes } : {}),
-    }));
+    const attachments = buildAttachmentPayload(this._items ?? []);
     fileItems.forEach((i) => { if (i.thumbnail) URL.revokeObjectURL(i.thumbnail); });
     this._slashMenuEl?.close();
     this._controller.sendMessage(message, contextItems, { attachments });
@@ -399,7 +437,33 @@ class NxChat extends LitElement {
   _handlePillRemove({ detail: { id } }) {
     const removed = (this._items ?? []).find((i) => i.id === id);
     if (removed?.thumbnail) URL.revokeObjectURL(removed.thumbnail);
+    for (const [key, mappedId] of this._keyedItemIds) {
+      if (mappedId === id) this._keyedItemIds.delete(key);
+    }
     this._items = (this._items ?? []).filter((item) => item.id !== id);
+  }
+
+  _handlePillActivate({ detail: { id } }) {
+    const item = (this._items ?? []).find((i) => i.id === id);
+    if (!item) return;
+    const { selFrom, selTo, selectionType, blockName, proseIndex } = item;
+    if (typeof selFrom !== 'number' || typeof selTo !== 'number') return;
+    document.dispatchEvent(new CustomEvent('nx-highlight-selection', {
+      detail: { selFrom, selTo, selectionType, blockName, proseIndex },
+    }));
+  }
+
+  _handlePillPin({ detail: { id } }) {
+    const items = this._items ?? [];
+    const target = items.find((i) => i.id === id);
+    if (!target || !target.pinnable || target.pinned) return;
+    for (const [key, mappedId] of this._keyedItemIds) {
+      if (mappedId === id) this._keyedItemIds.delete(key);
+    }
+    const pinnedId = `pinned-${crypto.randomUUID()}`;
+    this._items = items.map((item) => (
+      item.id === id ? { ...item, id: pinnedId, pinned: true } : item
+    ));
   }
 
   _onDragEnter(e) {
@@ -502,6 +566,8 @@ class NxChat extends LitElement {
           <nx-chat-pills
             .items=${this._items}
             @nx-pill-remove=${this._handlePillRemove}
+            @nx-pill-pin=${this._handlePillPin}
+            @nx-pill-activate=${this._handlePillActivate}
           ></nx-chat-pills>` : nothing}
         <textarea
           name="chat-input"

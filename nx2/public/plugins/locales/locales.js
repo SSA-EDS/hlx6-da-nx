@@ -1,5 +1,5 @@
 import { html, LitElement } from 'da-lit';
-import DA_SDK from 'https://da.live/nx/utils/sdk.js';
+import DA_SDK from 'https://entmseds-da.live/nx/utils/sdk.js';
 import getStyle from '../../utils/styles.js';
 import { setContext, getLangsAndLocales, getPage, copyPage, publishPages } from './index.js';
 

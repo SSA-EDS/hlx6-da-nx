@@ -1,5 +1,129 @@
 # Worklog
 
+## 2026-07-14
+
+### nx2/styles/styles.css — pin to light mode
+
+Changed `:root { color-scheme: light dark; }` → `color-scheme: light;` and `.dark-scheme { color-scheme: dark; }` → `color-scheme: light;`. Matches nx1 (`nexter.css`) which pins `:root` to light, and da-live browse which forces both `.light-scheme` and `.dark-scheme` to `color-scheme: light` so the profile toggle can't override.
+
+## 2026-07-09
+
+### nx/blocks/secure-org — migrate secure-org block to nx2
+
+Added `'secure-org'` to `NX_BLOCKS` in `nx2/scripts/nx.js`. Block stays in `nx/blocks/secure-org/` per migration convention.
+
+Import updates in `secure-org.js`:
+- Dropped `getConfig` from nexter.js; icon URLs built via `new URL('../../public/icons/...', import.meta.url).href` (icons live only in nx1)
+- `../../utils/ims.js` `loadIms` → `../../../nx2/utils/ims.js`
+- `../../utils/styles.js` default `getStyle` → `{ loadStyle }` from `../../../nx2/utils/utils.js`
+- `../../utils/svg.js` `getSvg` → default `loadIcons` from `../../../nx2/utils/svg.js`
+
+Import updates in `utils.js`:
+- `../../public/utils/constants.js` (DA_ORIGIN) → `../../../nx2/public/utils/constants.js`
+- `../../utils/daFetch.js` (daFetch) → `../../../nx2/utils/api.js`; call site updated from positional `daFetch(url, opts)` to destructured `daFetch({ url, opts })`
+
+CSS variables in `secure-org.css`:
+- `--grid-container-width` → `--se-grid-container-width` with nx1 fallback
+- `--spacing-800` → `--s2-spacing-800` with nx1 fallback
+
+Verified live at `/apps/sandbox?nx=local` — block renders correctly (nx-path input, orange warning alert with AlertDiamond icon), no console errors.
+
+### nx/blocks/bulk — migrate bulk operations block to nx2
+
+Added `'bulk'` to `NX_BLOCKS` in `nx2/scripts/nx.js`. Block stays in `nx/blocks/bulk/` per migration convention.
+
+Import updates in `bulk.js`:
+- `../../deps/lit/lit-core.min.js` → `da-lit`
+- Dropped `getConfig` from nexter.js; icon URL built via `new URL('../../img/icons/...', import.meta.url).href` (icon only exists in nx1)
+- `../../public/utils/tree.js` → `../../../nx2/public/utils/tree.js` (Queue)
+- `../../utils/svg.js` `getSvg` → `../../../nx2/utils/svg.js` default `loadIcons` (compatible `{ paths } → Promise<svg[]>` signature)
+- `../../utils/styles.js` default `getStyle` → `{ loadStyle }` from `../../../nx2/utils/utils.js`
+
+Import updates in `index.js`:
+- `../../public/utils/getExt.js` → `../../../nx2/public/utils/getExt.js`
+- `../../utils/daFetch.js` → `../../../nx2/utils/api.js`
+- `../../public/utils/constants.js` → `../../../nx2/public/utils/constants.js`
+- **API signature change:** nx2's `daFetch` uses destructured args, so `daFetch(url, opts)` → `daFetch({ url, opts })`
+
+CSS variables in `bulk.css` mapped to nx2-first-nx1-fallback:
+- `--grid-container-width` → `--se-grid-container-width`
+- `--spacing-*` → `--s2-spacing-*`
+- `--body-font-family` → `--s2-font-family`
+- `--s2-radius-100` → `--s2-corner-radius-500`
+- `--s2-font-size-600` (31px) → `--s2-heading-size-xl` (36px, closest available)
+
+### nx/blocks/tree/tree.js — migrate tree block to nx2
+
+Added `'tree'` to `NX_BLOCKS` in `nx2/scripts/nx.js` so the block always loads from `/nx/blocks`.
+
+Updated imports in `nx/blocks/tree/tree.js` to nx2 equivalents (block stays in place per migration convention):
+- `../../deps/lit/lit-core.min.js` → `da-lit` (importmap)
+- `../../scripts/nexter.js` → `../../../nx2/scripts/nx.js` (for `getConfig`)
+- `../../public/utils/tree.js` → `../../../nx2/public/utils/tree.js` (for `crawl`)
+- `../../utils/styles.js` (default `getStyle`) → `{ loadStyle }` from `../../../nx2/utils/utils.js`
+
+## 2026-06-26
+
+### nx2/blocks/chat/chat.js — skill selection preserves pending attachments (feat/da-skill-attachment-fix)
+
+`_onSlashSelect()` was calling `sendMessage(message, [], { requestedSkills: [skillId] })`, discarding any pending file pills in `this._items`. Fixed by mirroring `_submit()`'s attachment-building logic: split `this._items` into `fileItems` (truthy `dataBase64`) and `contextItems`, build the `attachments` array with the same field/sizeBytes pattern, revoke thumbnail object URLs, clear `this._items`, then pass `{ requestedSkills: [skillId], attachments }` and `contextItems` to `sendMessage`.
+
+Post-review follow-up (fe049a9b):
+- Extracted `_buildAttachmentPayload(items)` shared by both `_submit` and `_onSlashSelect`
+- Moved `this._items = []` to after `sendMessage` call (was before, losing attachments on throw)
+- Guard `attachments` key: only spread into opts when `attachments.length > 0`
+- Read `this._items` once into local `const items` before filter calls
+- Renamed loop variable `i` → `item` in `_onSlashSelect` callbacks
+- Added regression tests in `test/nx2/blocks/chat/chat.test.js` (8 tests, all pass)
+
+## 2026-06-25
+
+### exp block — fix IMS timeout, restore SL typography
+
+The iframe palette failed with `Error: IMS timeout` from `nx2/utils/ims.js` on `?nx=nx2-exp` URLs. Root cause: da-live's `/plugins/exp` page lacks a `<meta name="nxver">`, so the iframe boots in **nx1 mode** — `nxJS = '/scripts/nexter.js'`, `getNx()` returns `…/nx` (not `…/nx2`), and da-live's `initIms()` imports `nx/utils/ims.js`. But this branch's `nx/blocks/exp/exp.js` statically imports `nx2/blocks/profile/profile.js`, which statically imports `nx2/utils/ims.js`. Two `loadIms` modules in the same window, each with its own memoization, each tries to bootstrap imslib independently — first one wins; the second's `onReady` is never re-fired (imslib reads `window.adobeid` once at load time), and we time out.
+
+Fix in `nx/public/plugins/exp/exp.js`: append `&nxver=2` to the iframe `src`. da-live then boots the iframe in nx2 mode, loads `nx2/utils/ims.js` for `initIms`, and shares memoization with exp's statics. Single setup, single bootstrap. (Applied to both the `main` and branched URLs so the fix holds once the migration lands on main.)
+
+Other changes needed to support exp on nx2 profile:
+- `nx/blocks/exp/exp.js`: swapped `'../profile/profile.js'` → `'../../../nx2/blocks/profile/profile.js'` so exp shares the nx2 ims memoization with da-live's `initIms` (now also nx2 thanks to the `nxver=2` flip above).
+- `nx2/blocks/profile/profile.js`: `handleLoaded` now also dispatches `CustomEvent('loaded', { detail: this._ims, bubbles, composed })`, matching the nx1 contract that exp's `@loaded=${this.handleProfileLoad}` listens for.
+- `nx/blocks/exp/exp.js`: adopt the SL stylesheet on `document` as well as the shadow root. SL targets `:root`, which doesn't match inside a shadow tree, so without document adoption the `--s2-*` custom-property cascade was never set up and typography (e.g. the "Edit experiment" heading, the slider's `%` label) fell back to browser defaults. nx1 got this for free because the previous `loadStyle` had a document-level side effect; nx2's `loadStyle` returns a constructable sheet only.
+- `nx2/scripts/nx.js` `loc()`: `strings.get(key) ?? key` → `strings?.get(key) ?? key`. Latent bug — when `getConfig()` returns the `{ error }` stub (config not set yet), `strings` is undefined and the throw masked the design-intended `?? key` fallback.
+
+Things that looked load-bearing during investigation but weren't (all reverted once the iframe-mode mismatch was identified):
+- Short-circuit / "reuse existing `window.adobeIMS`" in `nx2/utils/ims.js` `setup()` — only needed when two `loadIms` modules race against the same imslib, which the `nxver=2` flip prevents.
+- `loginPopup` / `modalMode` plumbing in `loadIms`.
+- Async setup + per-call `resolveNxConfig()` re-read.
+- `IMS_TIMEOUT` bump to 15s.
+- Defensive `config.log` / `_ims` guards in `nx2/blocks/profile/profile.js`.
+
+### exp block — completed nx2 migration (importer pattern)
+
+Block stays under `nx/blocks/exp/`; all nx2 API imports use relative paths into `nx2/`.
+
+- `nx/blocks/exp/exp.js`: removed nx1 `loadStyle` (nexter.js) and `getStyle` (utils/styles.js); imports `loadStyle` from `nx2/utils/utils.js`; SL components updated to `nx2/public/sl/components.js`; dropped document-level `loadStyle` side effect (nx2 version returns constructable sheet directly).
+- `nx/blocks/exp/views/edit.js`: removed `getConfig` from nx1 `nexter.js` (returns `{ error }` in nx2 context since nx1 config is never initialized); replaced `nxBase` with `new URL(import.meta.url).origin + '/nx'` pattern; switched to nx2 `loadStyle`.
+- All other views (`actions`, `dialog`, `login`, `new`, `view`): `getStyle` (nx1) → `loadStyle` from `nx2/utils/utils.js`.
+
+Previously done (2026-06-24):
+- `nx2/scripts/nx.js`: added `'exp'` to `NX_BLOCKS`.
+- `nx/blocks/exp/utils.js`: `DA_ORIGIN` → `DA_ADMIN`, `AEM_ORIGIN` → `HLX_ADMIN`, `loadIms` → `nx2/utils/ims.js`.
+
+## 2026-06-23
+
+### nx2/blocks/shared/dialog — configurable panel sizing (dialog-css-vars branch)
+
+Exposes four CSS custom properties on `.panel` so consumers can resize the dialog without forking it:
+
+- `--nx-dialog-min-width` (default `400px`)
+- `--nx-dialog-max-width` (default `480px`)
+- `--nx-dialog-max-height` (default `90vh` / `90dvh`)
+- `--nx-dialog-padding` (default `var(--s2-spacing-500)`)
+
+Values stay clamped to the viewport via the existing `min(<custom>, calc(100vw - 2 * --s2-spacing-500))` envelope, so a too-large custom value won't overflow. Purely additive — existing usage of `<nx-dialog>` is unchanged (each fallback in the `var()` call matches the previous literal).
+
+Driving use case is da-live's new EW block library modal, which needs a ~960px wide 2-column tree+preview layout that the previous fixed 480px cap couldn't accommodate.
+
 ## 2026-05-28
 
 ### nx2/utils/api.js — consistency refactor (api-refactor branch)
@@ -110,14 +234,14 @@ Moved `nx2/blocks/chat/` and `nx2/blocks/tool-panel/` from da-nx into da-live as
 ### nx2 utils — DA config API
 - **`nx2/utils/daConfig.js`**: **`getFirstSheet`**, **`fetchDaConfigs`** (moved from **`nx-panel-extensions/config.js`**). Canvas **`helpers.js`** / **`aem-assets.js`** import from utils; branch **`ref`** stays local to **`helpers.js`**.
 
-### nx2 canvas — library panel action icons (da.live parity)
-- **`nx-panel-extensions.js` / `.css`**: Add / Preview use the same **`/blocks/edit/img/`** SVGs and **`<use href="#S2_Icon_Experience_Add">` / `#S2_Icon_ExperiencePreview`** pattern as da.live **`da-library`** (via shared **`inlinesvg`** preload). Source SVGs live in **`.ext-svg-sprites`** (visually hidden) so they are not laid out in the panel body.
+### nx2 canvas — library panel action icons (entmseds-da.live parity)
+- **`nx-panel-extensions.js` / `.css`**: Add / Preview use the same **`/blocks/edit/img/`** SVGs and **`<use href="#S2_Icon_Experience_Add">` / `#S2_Icon_ExperiencePreview`** pattern as entmseds-da.live **`da-library`** (via shared **`inlinesvg`** preload). Source SVGs live in **`.ext-svg-sprites`** (visually hidden) so they are not laid out in the panel body.
 
 ### nx2 canvas — block variants: no inline DOM preview
 - **`nx-panel-extensions.js` / `.css`**: variant rows no longer embed **`v.dom`** in the Lit tree (avoids cloning / ownership issues). Insert still uses **`variant.dom`** via **`_insertBlock`**.
 
 ### nx2 canvas — AEM Assets Cancel closes panel
-- **`aem-assets.js`**: pass **`onClose`** through to **`PureJSSelectors.renderAssetSelector`** (same hook as da.live **`da-assets.js`**).
+- **`aem-assets.js`**: pass **`onClose`** through to **`PureJSSelectors.renderAssetSelector`** (same hook as entmseds-da.live **`da-assets.js`**).
 - **`nx-panel-extensions.js`**: **`onClose`** dispatches **`nx-panel-close`** so **`panel.js`** hides the right aside.
 
 ### nx2 canvas — `experience` for picker / tab bypass (`window`, `fullsize-dialog`)
@@ -162,16 +286,16 @@ Moved `nx2/blocks/chat/` and `nx2/blocks/tool-panel/` from da-nx into da-live as
 - `canvas-actions.js`: `HashController` and initial `_busy` moved to class fields so the custom constructor can be dropped; `_sendIcon` is not a reactive property (set once in `firstUpdated` + `requestUpdate()`); dropped redundant `requestUpdate()` after `_busy` / `_error` changes (Lit `@state` assignments schedule updates).
 
 ### Canvas prose — undo/redo keymap
-- `prose.js`: removed custom `handleUndo` / `handleRedo` that duplicated `yUndo` / `yRedo` from y-prosemirror (same pattern as `nx-editor-wysiwyg/utils/handlers.js` and da.live’s underlying commands).
+- `prose.js`: removed custom `handleUndo` / `handleRedo` that duplicated `yUndo` / `yRedo` from y-prosemirror (same pattern as `nx-editor-wysiwyg/utils/handlers.js` and entmseds-da.live’s underlying commands).
 
 ## 2026-04-22
 
-### Canvas prose — keymap order aligned with da.live
-- `prose.js`: moved `keymap(baseKeymap)` to after `buildKeymap` + `handleTableBackspace` (and `codemark` after `baseKeymap`), matching `da-live/blocks/edit/prose/index.js`, so full-table delete with Backspace and Enter in lists behave like da.live.
+### Canvas prose — keymap order aligned with entmseds-da.live
+- `prose.js`: moved `keymap(baseKeymap)` to after `buildKeymap` + `handleTableBackspace` (and `codemark` after `baseKeymap`), matching `da-live/blocks/edit/prose/index.js`, so full-table delete with Backspace and Enter in lists behave like entmseds-da.live.
 
-### Canvas prose — plugins ported from da.live
+### Canvas prose — plugins ported from entmseds-da.live
 - Added `nx2/blocks/canvas/nx-editor-doc/prose-plugins/`: `codemark`, `columnResizing` (from `da-y-wrapper`), `imageDrop`, `imageFocalPoint`, `tableSelectHandle`, `sectionPasteHandler`, `base64Uploader`, plus `sourceUploadContext`, `tableUtils`, `inlinesvg`, `focalPointDialog` (native `<dialog>`; no face-api).
-- Wired plugins in `prose.js` for writable sessions; styles in `nx-editor-doc.css`. Upload paths derive from the editor `source` URL. Focal-point block metadata still loads from `https://da.live/.../da-library/helpers/`.
+- Wired plugins in `prose.js` for writable sessions; styles in `nx-editor-doc.css`. Upload paths derive from the editor `source` URL. Focal-point block metadata still loads from `https://entmseds-da.live/.../da-library/helpers/`.
 
 ## 2026-04-21
 

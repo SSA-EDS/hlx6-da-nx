@@ -13,7 +13,7 @@ describe('medialog indexing', () => {
     const mediaMap = new Map();
     const rows = mergeMedialogChunkIntoMap(
       [{
-        path: 'https://main--blog--adobe.aem.page/media/media_test123.png',
+        path: 'https://main--blog--adobe.entmseds.page/media/media_test123.png',
         mediaHash: 'mh1',
         timestamp: 1,
         user: '',
@@ -47,7 +47,7 @@ describe('medialog indexing', () => {
   it('processStandaloneUploads records unused for same-site DA upload', () => {
     const idx = [];
     const medialogEntries = [{
-      path: 'https://main--blog--adobe.aem.page/media/media_standalone.png',
+      path: 'https://main--blog--adobe.entmseds.page/media/media_standalone.png',
       mediaHash: 'u1',
       originalFilename: '/assets/products/standalone.png',
       resourcePath: null,
@@ -75,7 +75,7 @@ describe('medialog indexing', () => {
   it('removeOrOrphanMedia re-homes same-site row as unused', () => {
     const idx = [{
       hash: 'h1',
-      url: 'https://main--blog--adobe.aem.page/media/orphan.png',
+      url: 'https://main--blog--adobe.entmseds.page/media/orphan.png',
       originalPath: '/assets/icons/orphan.png',
       doc: '/docs/p',
       type: 'image',

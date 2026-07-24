@@ -47,7 +47,7 @@ function resetHrefs(doc, org, repo) {
   const anchors = doc.querySelectorAll('[href^="/"]');
   anchors.forEach((a) => {
     const href = a.getAttribute('href');
-    a.href = `https://main--${repo}--${org}.aem.page${href}`;
+    a.href = `https://main--${repo}--${org}.entmseds.page${href}`;
   });
 }
 

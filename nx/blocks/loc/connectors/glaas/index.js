@@ -1,7 +1,7 @@
-import { Queue } from '../../../../public/utils/tree.js';
+import { Queue } from '../../../../../nx2/public/utils/tree.js';
 import {
   checkSession, createTask, addAssets, updateStatus, getTask, downloadAsset,
-  prepareTargetPreview, getGlaasFilename,
+  prepareTargetPreview, getGlaasFilename, shouldLogGLaaSRequests,
 } from './api.js';
 import {
   createMultimodalTask,
@@ -10,7 +10,6 @@ import {
   getMultimodalV2TaskStatus,
   prepareMultimodalPageForSave,
   logMultimodalRequest,
-  shouldLogMultimodalRequests,
 } from './multimodalApi.js';
 import { getGlaasToken, connectToGlaas } from './auth.js';
 import { addDnt, removeDnt } from './dnt.js';
@@ -219,7 +218,7 @@ async function sendMultimodalTask(service, suppliedTask, urls, actions, { org, s
     updateLangTask(task, task.langs);
     await saveState();
 
-    const logRequest = shouldLogMultimodalRequests() ? logMultimodalRequest : undefined;
+    const logRequest = shouldLogGLaaSRequests() ? logMultimodalRequest : undefined;
     logRequest?.('translate-all-send', {
       taskName: task.name,
       workflow: task.workflow,
@@ -346,6 +345,56 @@ async function sendTask(service, suppliedTask, urls, actions, { org, site } = {}
   }
 }
 
+async function fetchTaskSubtasks({
+  service, glaasToken, taskConfig, task, langs, pageAssets,
+}) {
+  return task.workflowName === 'MULTIMODAL'
+    ? getMultimodalV2TaskStatus({
+      service,
+      token: glaasToken,
+      task: taskConfig,
+      langs,
+      pageAssets,
+    })
+    : getTask({ ...taskConfig, token: glaasToken, service });
+}
+
+async function recreateTaskAndFetchSubtasks({
+  service,
+  glaasToken,
+  taskConfig,
+  task,
+  langs,
+  urls,
+  actions,
+  org,
+  site,
+  workflowMeta,
+}) {
+  const taskUrls = task.urlPaths
+    ? urls.filter((url) => task.urlPaths.includes(url.suppliedPath))
+    : urls;
+
+  const tempTask = {
+    name: task.name,
+    workflow: task.workflow,
+    workflowName: task.workflowName,
+    businessUnit: workflowMeta?.businessUnit,
+    langs: task.langs,
+    urlPaths: task.urlPaths,
+  };
+
+  await sendTask(service, tempTask, taskUrls, actions, { org, site });
+  return fetchTaskSubtasks({
+    service,
+    glaasToken,
+    taskConfig,
+    task,
+    langs,
+    pageAssets: pageAssetsFromTaskLangs(task),
+  });
+}
+
 // Business unit determination logic for GLaaS Transcreation Style Guide
 const getBusinessUnit = (siteName) => {
   if (siteName && siteName.includes('bacom')) {
@@ -448,46 +497,27 @@ export async function getStatusAll({
 
     const workflowMeta = task.langs[0]?.translation?.workflowTasks?.[task.name];
     const taskPageAssets = pageAssetsFromTaskLangs(task);
-    let subtasks;
-    if (task.workflowName === 'MULTIMODAL') {
-      subtasks = await getMultimodalV2TaskStatus({
-        service,
-        token: baseConf.token,
-        task: taskConfig,
-        langs: task.langs,
-        pageAssets: taskPageAssets,
-      });
-    } else {
-      subtasks = await getTask({ ...taskConfig, service });
-    }
-    // If something went wrong, create the task again.
+    let subtasks = await fetchTaskSubtasks({
+      service,
+      glaasToken: baseConf.token,
+      taskConfig,
+      task,
+      langs: task.langs,
+      pageAssets: taskPageAssets,
+    });
     if (subtasks.status === 404) {
-      // If something went wrong, create the task again.
-      const taskUrls = task.urlPaths
-        ? urls.filter((url) => task.urlPaths.includes(url.suppliedPath))
-        : urls;
-
-      const tempTask = {
-        name: task.name,
-        workflow: task.workflow,
-        workflowName: task.workflowName,
-        businessUnit: workflowMeta?.businessUnit,
+      subtasks = await recreateTaskAndFetchSubtasks({
+        service,
+        glaasToken: baseConf.token,
+        taskConfig,
+        task,
         langs: task.langs,
-        urlPaths: task.urlPaths,
-      };
-
-      await sendTask(service, tempTask, taskUrls, actions, { org, site });
-      if (task.workflowName === 'MULTIMODAL') {
-        subtasks = await getMultimodalV2TaskStatus({
-          service,
-          token: baseConf.token,
-          task: taskConfig,
-          langs: task.langs,
-          pageAssets: pageAssetsFromTaskLangs(task),
-        });
-      } else {
-        subtasks = await getTask({ ...taskConfig, service });
-      }
+        urls,
+        actions,
+        org,
+        site,
+        workflowMeta,
+      });
     }
 
     for (const subtask of subtasks.json) {
@@ -515,12 +545,14 @@ export async function getStatusAll({
     }
     sendMessage();
   }
+  let hasUpdates = false;
   for (const lang of langs) {
     if (lang.translation?.workflowTasks) {
       aggregateWorkflowStatus(lang);
-      await saveState();
+      hasUpdates = true;
     }
   }
+  if (hasUpdates) await saveState();
 }
 
 export async function saveItems({
@@ -530,6 +562,7 @@ export async function saveItems({
   lang,
   urls,
   saveFn,
+  sendMessage,
 }) {
   normalizeLegacyStructure(lang, urls);
 
@@ -554,6 +587,8 @@ export async function saveItems({
     throw new Error(`No matching tasks found for URLs: ${missingUrls.map((u) => u.suppliedPath).join(', ')}`);
   }
 
+  const logRequest = shouldLogGLaaSRequests() ? logMultimodalRequest : undefined;
+
   const downloadCallback = async (url) => {
     const task = urlToTaskMap.get(url.suppliedPath);
     const glaasPath = getGlaasFilename(url.daBasePath);
@@ -575,6 +610,8 @@ export async function saveItems({
         langCode: code,
         pageAsset,
         htmlAssetName: glaasPath,
+        logRequest,
+        onWarning: sendMessage,
       });
       if (prepared.error) throw new Error(prepared.error);
       text = prepared.text;
@@ -621,22 +658,35 @@ export async function cancelTranslation({ service, lang, sendMessage }) {
 
   if (!canCancelLang({ lang })) {
     sendMessage({ text: `Skipping ${lang.name}. No translation information.` });
-    return null;
+    return { ok: true, skipped: true };
   }
 
   const { code } = lang;
   // As a service provider, you need to say what will be canceled
   if (lang.translation?.workflowTasks) {
-    const cancelPromises = Object.values(lang.translation.workflowTasks)
-      .map(async (workflowTask) => {
-        const taskName = workflowTask.name;
-        const taskWorkflow = workflowTask.workflow;
-        sendMessage({ text: `Canceling task ${taskName} for ${lang.name}.` });
-        return updateStatus(service, token, { name: taskName, workflow: taskWorkflow, targetLocales: [code] }, 'CANCELLED');
+    const cancelResults = await Promise.all(
+      Object.values(lang.translation.workflowTasks)
+        .map(async (workflowTask) => {
+          const taskName = workflowTask.name;
+          const taskWorkflow = workflowTask.workflow;
+          sendMessage({ text: `Canceling task ${taskName} for ${lang.name}.` });
+          return updateStatus(
+            service,
+            token,
+            { name: taskName, workflow: taskWorkflow, targetLocales: [code] },
+            'CANCELLED',
+          );
+        }),
+    );
+    const ok = cancelResults.every((result) => result?.ok);
+    if (!ok) {
+      sendMessage({
+        text: `GLaaS did not accept cancel for ${lang.name} (task may not be in a cancelable state).`,
+        type: 'error',
       });
-
-    return Promise.all(cancelPromises);
+    }
+    return { ok };
   }
   sendMessage({ text: `No tasks found to cancel for ${lang.name}.` });
-  return null;
+  return { ok: true };
 }

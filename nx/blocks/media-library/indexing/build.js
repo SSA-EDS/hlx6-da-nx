@@ -76,7 +76,7 @@ async function runWorkerBuild(
   const perfEnabled = isPerfEnabled();
 
   // Create worker using blob URL to avoid CORS issues with ?nx=local
-  // When running with ?nx=local, files load from localhost but page is on da.live
+  // When running with ?nx=local, files load from localhost but page is on entmseds-da.live
   // Workers must be same-origin, so we create a blob URL
   const workerUrl = new URL('./worker/worker.js', import.meta.url).href;
   const response = await fetch(workerUrl);

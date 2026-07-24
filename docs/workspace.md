@@ -31,7 +31,7 @@ The following sections highlight some principles in more detail.
 ### Backend communication
 - Use `daFetch` from `nx2/utils/daFetch.js` to fetch data from the backend
 - Da Admin documentation: https://opensource.adobe.com/da-admin/
-- Helix Admin documentation: https://www.aem.live/docs/admin.html
+- Helix Admin documentation: https://www.entmseds.live/docs/admin.html
 
 ### Version Control
 - Make small commits with meaningful commit messages
@@ -61,7 +61,7 @@ nx2
     ├── daConfig.js     (site config fetching)
     └── sdk.js          (Extension Client SDK, when used)
 
-Skills Lab — external app at da.live/apps/skills, linked from Chat
+Skills Lab — external app at entmseds-da.live/apps/skills, linked from Chat
 ```
 
 ---

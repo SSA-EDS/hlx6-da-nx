@@ -10,7 +10,7 @@ export function getImageAltFragmentUrls(dom) {
     .map((img) => {
       const alt = img.getAttribute('alt');
       // Alt fragments are in this format:
-      // https://main--bacom--adobecom.hlx.live/fragments/products/modal/videos/adobe-experience-manager/sites/omnichannel-experiences/experience-fragments#xf | Experience Fragment demo video | :play-medium:
+      // https://main--bacom--adobecom.entmseds.live/fragments/products/modal/videos/adobe-experience-manager/sites/omnichannel-experiences/experience-fragments#xf | Experience Fragment demo video | :play-medium:
       if (alt.includes('/fragments/')) {
         const [href] = alt.split('|');
         if (href?.includes('/fragments/')) {

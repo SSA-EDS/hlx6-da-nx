@@ -1,8 +1,9 @@
-import { DA_ORIGIN } from '../../../../public/utils/constants.js';
-import { Queue } from '../../../../public/utils/tree.js';
-import { daFetch } from '../../../../utils/daFetch.js';
+import { DA_ADMIN } from '../../../../../nx2/utils/utils.js';
+import { Queue } from '../../../../../nx2/public/utils/tree.js';
+import { daFetch } from '../../../../../nx2/utils/api.js';
+
 import { convertPath, createSnapshotPrefix, fetchConfig } from '../../utils/utils.js';
-import { mergeCopy, overwriteCopy } from '../../project/index.js';
+import { MAX_CONCURRENT_READS, MAX_CONCURRENT_WRITES, mergeCopy, overwriteCopy } from '../../project/index.js';
 
 let CONNECTOR;
 
@@ -38,7 +39,7 @@ export async function getUrls(
     return {
       ...url,
       ...formatted,
-      aemHref: `https://main--${site}--${org}.aem.page${formatted.aemBasePath}`,
+      aemHref: `https://main--${site}--${org}.entmseds.page${formatted.aemBasePath}`,
     };
   });
 
@@ -48,11 +49,8 @@ export async function getUrls(
 
     // Fetch the content and add DNT
     const fetchUrl = async (url) => {
-      const resp = await daFetch(`${DA_ORIGIN}/source/${org}/${site}${url.daDestPath}`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
-      });
+      const opts = { headers: { 'Cache-Control': 'no-cache' } };
+      const resp = await daFetch({ url: `${DA_ADMIN}/source/${org}/${site}${url.daDestPath}`, opts });
       if (!resp.ok) {
         url.error = `Error fetching content from ${url.daDestPath} - ${resp.status}`;
         return;
@@ -81,7 +79,7 @@ export async function getUrls(
       }
     };
 
-    const queue = new Queue(fetchUrl, 50);
+    const queue = new Queue(fetchUrl, MAX_CONCURRENT_READS);
 
     await Promise.allSettled(formattedUrls.map((url) => queue.push(url)));
   }
@@ -125,6 +123,7 @@ async function saveLang({
     langIndex,
     urls: urlsToSave,
     saveFn,
+    sendMessage,
   });
 
   const savedCount = saved.filter((url) => url.status === 'success').length;
@@ -162,7 +161,7 @@ export async function copySourceLangs(org, site, title, options, langs, urls, la
   };
 
   for (const [idx, lang] of langs.entries()) {
-    const queue = new Queue(copyUrl, 50);
+    const queue = new Queue(copyUrl, MAX_CONCURRENT_WRITES);
 
     // Find the URLs from the lang that has the URLs (custom source URLs)
     const langUrls = langsWithUrls[idx].urls.map((url) => {

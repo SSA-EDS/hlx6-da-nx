@@ -86,7 +86,7 @@ describe('filters', () => {
     // Sample data fixtures
     const sampleData = [
       {
-        url: 'https://main--blog--adobe.aem.live/media/image1.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/image1.png',
         name: 'image1.png',
         displayName: 'Image 1',
         doc: '/docs/page1',
@@ -94,7 +94,7 @@ describe('filters', () => {
         hash: 'hash1',
       },
       {
-        url: 'https://main--blog--adobe.aem.live/media/video1.mp4',
+        url: 'https://main--blog--adobe.entmseds.live/media/video1.mp4',
         name: 'video1.mp4',
         displayName: 'Video 1',
         doc: '/docs/page2',
@@ -102,7 +102,7 @@ describe('filters', () => {
         hash: 'hash2',
       },
       {
-        url: 'https://main--blog--adobe.aem.live/media/icon.svg',
+        url: 'https://main--blog--adobe.entmseds.live/media/icon.svg',
         name: 'icon.svg',
         displayName: 'Icon',
         doc: '/docs/page1',
@@ -110,7 +110,7 @@ describe('filters', () => {
         hash: 'hash3',
       },
       {
-        url: 'https://main--blog--adobe.aem.live/media/document.pdf',
+        url: 'https://main--blog--adobe.entmseds.live/media/document.pdf',
         name: 'document.pdf',
         displayName: 'Document',
         doc: '/docs/guide',
@@ -118,7 +118,7 @@ describe('filters', () => {
         hash: 'hash4',
       },
       {
-        url: 'https://main--blog--adobe.aem.live/fragments/footer',
+        url: 'https://main--blog--adobe.entmseds.live/fragments/footer',
         name: 'footer',
         displayName: 'Footer Fragment',
         doc: '/index',
@@ -135,7 +135,7 @@ describe('filters', () => {
         hash: 'https://youtube.com/watch?v=abc123',
       },
       {
-        url: 'https://main--blog--adobe.aem.live/media/unused.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/unused.png',
         name: 'unused.png',
         displayName: 'Unused Image',
         doc: '',
@@ -340,14 +340,14 @@ describe('filters', () => {
   describe('getSearchSuggestions', () => {
     const sampleData = [
       {
-        url: 'https://main--blog--adobe.aem.live/media/header-image.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/header-image.png',
         name: 'header-image.png',
         displayName: 'Header Image',
         doc: '/docs/page1',
         status: 'referenced',
       },
       {
-        url: 'https://main--blog--adobe.aem.live/media/footer-image.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/footer-image.png',
         name: 'footer-image.png',
         displayName: 'Footer Image',
         doc: '/docs/page2',
@@ -361,7 +361,7 @@ describe('filters', () => {
         status: 'referenced',
       },
       {
-        url: 'https://main--blog--adobe.aem.live/media/unused.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/unused.png',
         name: 'unused.png',
         displayName: 'Unused Image',
         doc: '',
@@ -482,7 +482,7 @@ describe('filters', () => {
 
     it('limits suggestions to 10 results', () => {
       const largeDataset = Array.from({ length: 50 }, (_, i) => ({
-        url: `https://main--blog--adobe.aem.live/media/image${i}.png`,
+        url: `https://main--blog--adobe.entmseds.live/media/image${i}.png`,
         name: `image${i}.png`,
         displayName: `Image ${i}`,
         doc: '/docs/page',
@@ -521,7 +521,7 @@ describe('filters', () => {
     it('slash suggestions include folders from original no-doc asset paths', async () => {
       clearProcessDataCache();
       const noDocItem = {
-        url: 'https://main--blog--adobe.aem.live/media/assets-deep/file.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/assets-deep/file.png',
         originalPath: '/assets/products/ascent-x2/ascent-x2-mood.jpg',
         name: 'file.png',
         displayName: 'File',
@@ -553,7 +553,7 @@ describe('filters', () => {
     const repo = 'blog';
     const data = [
       {
-        url: 'https://main--blog--adobe.aem.live/media/ref.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/ref.png',
         name: 'ref.png',
         doc: '/docs/a',
         status: 'referenced',
@@ -561,7 +561,7 @@ describe('filters', () => {
         type: 'image',
       },
       {
-        url: 'https://main--blog--adobe.aem.live/media/alone.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/alone.png',
         originalPath: '/assets/products/alone.png',
         name: 'alone.png',
         doc: '',
@@ -616,7 +616,7 @@ describe('filters', () => {
     it('filterMedia with root folder includes unused items that have asset folders', async () => {
       clearProcessDataCache();
       const noDocItem = {
-        url: 'https://main--blog--adobe.aem.live/media/deep/file.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/deep/file.png',
         originalPath: '/assets/products/ascent-x2/ascent-x2-mood.jpg',
         name: 'file.png',
         doc: '',
@@ -638,7 +638,7 @@ describe('filters', () => {
     it('filterMedia with root folder includes root-level no-doc assets', async () => {
       clearProcessDataCache();
       const noDocItem = {
-        url: 'https://main--blog--adobe.aem.live/root.png',
+        url: 'https://main--blog--adobe.entmseds.live/root.png',
         originalPath: '/root.png',
         name: 'root.png',
         doc: '',
@@ -661,7 +661,7 @@ describe('filters', () => {
     it('filterMedia folder: query matches no-doc item by original asset path', async () => {
       clearProcessDataCache();
       const noDocItem = {
-        url: 'https://main--blog--adobe.aem.live/media/nested/file.png',
+        url: 'https://main--blog--adobe.entmseds.live/media/nested/file.png',
         originalPath: '/assets/products/ascent-x2/ascent-x2-mood.jpg',
         name: 'file.png',
         doc: '',

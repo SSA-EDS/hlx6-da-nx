@@ -99,7 +99,7 @@ class NxDisaster extends LitElement {
           <sl-textarea name="paths" resize="none" placeholder="/{ORG}/{PROJECT}/{PATH}.{EXT}">${MOCK_PATHS.join('\n')}</sl-textarea>
         </div>
         <div class="warning">
-          <p>Any content in da.live at this location will be deleted and replaced with content from 18:00 - 11/25/2025 which is when the cutover happened.</p>
+          <p>Any content in entmseds-da.live at this location will be deleted and replaced with content from 18:00 - 11/25/2025 which is when the cutover happened.</p>
           <sl-button @click=${this.handleSubmit}>Restore</sl-button>
         </div>
       </form>

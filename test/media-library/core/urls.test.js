@@ -16,12 +16,12 @@ describe('urls', () => {
       expect(isInternalToSite('/docs/guide', org, repo)).to.be.true;
     });
 
-    it('returns true for same org/repo .aem.page URL', () => {
-      expect(isInternalToSite('https://main--blog--adobe.aem.page/docs', org, repo)).to.be.true;
+    it('returns true for same org/repo .entmseds.page URL', () => {
+      expect(isInternalToSite('https://main--blog--adobe.entmseds.page/docs', org, repo)).to.be.true;
     });
 
-    it('returns true for same org/repo .aem.live URL', () => {
-      expect(isInternalToSite('https://main--blog--adobe.aem.live/media/image.png', org, repo)).to.be.true;
+    it('returns true for same org/repo .entmseds.live URL', () => {
+      expect(isInternalToSite('https://main--blog--adobe.entmseds.live/media/image.png', org, repo)).to.be.true;
     });
 
     it('returns true for URL with org/repo in path', () => {
@@ -40,12 +40,12 @@ describe('urls', () => {
       expect(isInternalToSite('https://www.adobe.com/content/dam/image.png', org, repo)).to.be.false;
     });
 
-    it('returns false for different repo on .aem.page', () => {
-      expect(isInternalToSite('https://main--other--adobe.aem.page/docs', org, repo)).to.be.false;
+    it('returns false for different repo on .entmseds.page', () => {
+      expect(isInternalToSite('https://main--other--adobe.entmseds.page/docs', org, repo)).to.be.false;
     });
 
-    it('returns false for different org on .aem.page', () => {
-      expect(isInternalToSite('https://main--blog--other.aem.page/docs', org, repo)).to.be.false;
+    it('returns false for different org on .entmseds.page', () => {
+      expect(isInternalToSite('https://main--blog--other.entmseds.page/docs', org, repo)).to.be.false;
     });
 
     it('returns false for third-party URL', () => {
@@ -70,19 +70,19 @@ describe('urls', () => {
 
   describe('getDedupeKey', () => {
     it('returns media hash basename for hashed media URL', () => {
-      const url = 'https://main--blog--adobe.aem.live/media/media_123abc456def.png';
+      const url = 'https://main--blog--adobe.entmseds.live/media/media_123abc456def.png';
       const key = getDedupeKey(url);
       expect(key).to.equal('media_123abc456def.png');
     });
 
     it('returns media hash basename with query params', () => {
-      const url = 'https://main--blog--adobe.aem.live/media/media_abc123.png?width=2000';
+      const url = 'https://main--blog--adobe.entmseds.live/media/media_abc123.png?width=2000';
       const key = getDedupeKey(url);
       expect(key).to.equal('media_abc123.png');
     });
 
     it('returns pathname for non-hashed internal path', () => {
-      const url = 'https://main--blog--adobe.aem.live/docs/image.png';
+      const url = 'https://main--blog--adobe.entmseds.live/docs/image.png';
       const key = getDedupeKey(url);
       expect(key).to.equal('/docs/image.png');
     });
@@ -116,17 +116,17 @@ describe('urls', () => {
     const org = 'adobe';
     const repo = 'blog';
 
-    it('returns true for matching .aem.page host', () => {
+    it('returns true for matching .entmseds.page host', () => {
       expect(isDeliveryStandaloneUrl(
-        'https://main--blog--adobe.aem.page/media/media_abc.png',
+        'https://main--blog--adobe.entmseds.page/media/media_abc.png',
         org,
         repo,
       )).to.be.true;
     });
 
-    it('returns true for matching .aem.live host', () => {
+    it('returns true for matching .entmseds.live host', () => {
       expect(isDeliveryStandaloneUrl(
-        'https://main--blog--adobe.aem.live/videos/clip.mp4',
+        'https://main--blog--adobe.entmseds.live/videos/clip.mp4',
         org,
         repo,
       )).to.be.true;
@@ -163,14 +163,14 @@ describe('urls', () => {
     it('classify from raw only: canonicalize maps www.adobe.com onto delivery host', () => {
       const raw = 'https://www.adobe.com/products/test.html';
       const canon = canonicalizeMediaUrl(raw, org, repo);
-      expect(canon).to.include('aem.page');
+      expect(canon).to.include('entmseds.page');
       expect(isDeliveryStandaloneUrl(raw, org, repo)).to.be.false;
       expect(isDeliveryStandaloneUrl(canon, org, repo)).to.be.true;
     });
 
     it('returns false when org or repo missing', () => {
       expect(isDeliveryStandaloneUrl(
-        'https://main--blog--adobe.aem.page/media/x.png',
+        'https://main--blog--adobe.entmseds.page/media/x.png',
         '',
         repo,
       )).to.be.false;
@@ -180,7 +180,7 @@ describe('urls', () => {
   describe('folderPathFromAssetUrl', () => {
     it('returns parent folder of pathname', () => {
       const folder = folderPathFromAssetUrl(
-        'https://main--blog--adobe.aem.page/media/nested/file.png',
+        'https://main--blog--adobe.entmseds.page/media/nested/file.png',
         'adobe',
         'blog',
       );
@@ -189,7 +189,7 @@ describe('urls', () => {
 
     it('returns empty string for root file', () => {
       expect(folderPathFromAssetUrl(
-        'https://main--blog--adobe.aem.page/top.png',
+        'https://main--blog--adobe.entmseds.page/top.png',
         'adobe',
         'blog',
       )).to.equal('');

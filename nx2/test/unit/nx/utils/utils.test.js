@@ -59,12 +59,12 @@ describe('DA environment constants', () => {
     expect(DA_PREVIEW).to.match(/^https?:\/\//);
   });
 
-  it('HLX_ADMIN is admin.hlx.page', () => {
-    expect(HLX_ADMIN).to.equal('https://admin.hlx.page');
+  it('HLX_ADMIN is admin.entmseds.page', () => {
+    expect(HLX_ADMIN).to.equal('https://admin.entmseds.page');
   });
 
-  it('AEM_API is api.aem.live', () => {
-    expect(AEM_API).to.equal('https://api.aem.live');
+  it('AEM_API is api.entmseds.live', () => {
+    expect(AEM_API).to.equal('https://api.entmseds.live');
   });
 
   it('ALLOWED_TOKEN includes all DA origins plus HLX and AEM', () => {

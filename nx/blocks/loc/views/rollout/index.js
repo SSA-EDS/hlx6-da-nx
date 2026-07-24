@@ -1,7 +1,7 @@
-import { DA_ORIGIN } from '../../../../public/utils/constants.js';
-import { Queue } from '../../../../public/utils/tree.js';
-import { daFetch } from '../../../../utils/daFetch.js';
-import { mergeCopy, overwriteCopy } from '../../project/index.js';
+import { DA_ADMIN } from '../../../../../nx2/utils/utils.js';
+import { Queue } from '../../../../../nx2/public/utils/tree.js';
+import { daFetch } from '../../../../../nx2/utils/api.js';
+import { MAX_CONCURRENT_READS, MAX_CONCURRENT_WRITES, mergeCopy, overwriteCopy } from '../../project/index.js';
 import { convertPath, createSnapshotPrefix } from '../../utils/utils.js';
 
 function getTitle(status) {
@@ -30,7 +30,7 @@ function getRespStatusText(status) {
 
 async function fetchLangSources(lang, urls) {
   const fetchUrl = async (url) => {
-    const resp = await daFetch(`${DA_ORIGIN}/source${url.source}`);
+    const resp = await daFetch({ url: `${DA_ADMIN}/source${url.source}` });
     if (!resp.ok) {
       url.error = `Error fetching content from ${url.source} - ${getRespStatusText(resp.status)}`;
       return url;
@@ -49,7 +49,7 @@ async function fetchLangSources(lang, urls) {
 
     return url;
   };
-  const queue = new Queue(fetchUrl, 50);
+  const queue = new Queue(fetchUrl, MAX_CONCURRENT_READS);
   await Promise.all(urls.map((url) => queue.push(url)));
 
   // Setup the results obj
@@ -80,7 +80,7 @@ async function rolloutLangLocales(title, lang, urls, behavior) {
     await copyFn(url, title);
   };
 
-  const queue = new Queue(rolloutUrl, 50);
+  const queue = new Queue(rolloutUrl, MAX_CONCURRENT_WRITES);
   await Promise.all(urls.map((url) => queue.push(url)));
 
   // Setup the results obj

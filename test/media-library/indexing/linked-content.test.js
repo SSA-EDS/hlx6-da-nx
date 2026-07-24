@@ -51,7 +51,7 @@ describe('external media deduplication', () => {
 
     it('returns null for internal AEM URLs', () => {
       const result = toExternalMediaEntry(
-        'https://main--blog--adobe.aem.live/media/image.png',
+        'https://main--blog--adobe.entmseds.live/media/image.png',
         '/path/to/page',
         1234567890,
       );
