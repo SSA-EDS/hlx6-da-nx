@@ -49,7 +49,7 @@ export function replaceHtml(text, fromOrg, fromRepo, options = {}) {
   let inner = text;
 
   if (fromOrg && fromRepo && replaceRelative) {
-    const fromOrigin = `https://main--${fromRepo}--${fromOrg}.aem.live`;
+    const fromOrigin = `https://main--${fromRepo}--${fromOrg}.entmseds.live`;
     inner = text
       .replaceAll('./media', `${fromOrigin}/media`)
       .replaceAll('href="/', `href="${fromOrigin}/`);
@@ -80,7 +80,7 @@ export async function saveToDa(text, url, options = {}) {
   const { daMetadata = {}, replaceRelative = true } = options;
   const { org, repo, pathname } = url;
   const daPath = `/${org}/${repo}${pathname}`;
-  const daHref = `https://da.live/edit#${daPath}`;
+  const daHref = `https://entmseds-da.live/edit#${daPath}`;
 
   const body = replaceHtml(text, org, repo, { daMetadata, replaceRelative });
 
@@ -111,7 +111,7 @@ export async function saveAllToDa(url, content) {
   const { toOrg, toRepo, destPath, editPath, type } = url;
 
   const route = type === 'json' ? '/sheet' : '/edit';
-  url.daHref = `https://da.live${route}#/${toOrg}/${toRepo}${editPath}`;
+  url.daHref = `https://entmseds-da.live${route}#/${toOrg}/${toRepo}${editPath}`;
 
   const blob = getBlob(url, content);
   const body = new FormData();

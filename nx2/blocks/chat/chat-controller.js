@@ -1,7 +1,7 @@
 import { loadIms } from '../../utils/ims.js';
 import { AGENT_EVENT, ROLE, TOOL_NAME, TOOL_STATE } from './constants.js';
 import { readStream } from './utils/stream.js';
-import { loadMessages, saveMessages, resetSession } from './utils/persistence.js';
+import { loadMessages, saveMessages, resetSession, getRoomKey } from './utils/persistence.js';
 
 function affectedFolders(toolName, input) {
   const { org, repo } = input ?? {};
@@ -20,7 +20,7 @@ function affectedFolders(toolName, input) {
 
 const AGENT_URL = new URLSearchParams(window.location.search).get('ref') === 'local'
   ? 'http://localhost:4200/chat'
-  : 'https://agent.da.live/chat';
+  : 'https://agent.entmseds-da.live/chat';
 
 /**
  * Drop assistant array-content messages whose tool-call IDs have no matching
@@ -90,14 +90,22 @@ export default class ChatController {
 
   _pageContextForAgent() {
     const { org, site, path, view } = this._context ?? {};
-    return org && site ? { org, site, path: path ?? '', view } : undefined;
+    return org && site
+      ? {
+        org,
+        site,
+        path: path ?? '',
+        view,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }
+      : undefined;
   }
 
   async _getRoom() {
     if (this._room) return this._room;
     const { userId } = await loadIms();
     const { org, site } = this._context ?? {};
-    this._room = org && site && userId ? `${org}--${site}--${userId}` : 'default';
+    this._room = getRoomKey({ org, site, userId });
     return this._room;
   }
 
@@ -414,12 +422,29 @@ export default class ChatController {
     this._currentTurnId = crypto.randomUUID();
     this._requestedSkills = requestedSkills;
     const selectionContext = context
-      .filter((item) => typeof item.proseIndex === 'number' || item.blockName)
-      .map(({ proseIndex, blockName, innerText }) => ({
-        ...(typeof proseIndex === 'number' && { proseIndex }),
-        ...(blockName && { blockName }),
-        ...(innerText && { innerText }),
-      }));
+      .filter((item) => {
+        const t = item.type ?? (item.blockName ? 'block' : null);
+        if (t === 'block' || t === 'file' || t === 'folder' || t === 'image') return !!item.blockName;
+        if (t === 'text') return !!item.innerHTML;
+        return false;
+      })
+      .map((item) => {
+        const t = item.type ?? 'block';
+        const { proseIndex } = item;
+        if (t === 'text') {
+          return {
+            type: 'text',
+            ...(typeof proseIndex === 'number' && { proseIndex }),
+            innerHTML: item.innerHTML,
+          };
+        }
+        return {
+          type: t,
+          ...(typeof proseIndex === 'number' && { proseIndex }),
+          blockName: item.blockName,
+          ...(item.innerText && { innerText: item.innerText }),
+        };
+      });
 
     const attachmentsMeta = attachments.map(({ id, fileName, mediaType, sizeBytes }) => ({
       id,

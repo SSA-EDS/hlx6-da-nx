@@ -515,7 +515,7 @@ export function toLinkedContentEntry(
   if (filePath.startsWith(Paths.FRAGMENTS) && filePath.endsWith(Paths.EXT_HTML)) {
     urlPath = filePath.replace(/\.html$/, '');
   }
-  const url = `https://main--${repo}--${org}.aem.page${urlPath}`;
+  const url = `https://main--${repo}--${org}.entmseds.page${urlPath}`;
   const fileName = filePath.split('/').pop() || filePath;
 
   const rawModifiedTimestamp = lastModified || fileEvent.timestamp;

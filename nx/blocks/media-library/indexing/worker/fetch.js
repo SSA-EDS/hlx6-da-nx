@@ -88,9 +88,9 @@ export async function workerDaFetch(url, imsToken, opts = {}) {
   if (imsToken) {
     opts.headers.Authorization = `Bearer ${imsToken}`;
 
-    // For admin.hlx.page URLs, add x-content-source-authorization header
+    // For admin.entmseds.page URLs, add x-content-source-authorization header
     // This is required for writes and API access (matches daFetch.js:27-29)
-    if (url.startsWith('https://admin.hlx.page')) {
+    if (url.startsWith('https://admin.entmseds.page')) {
       opts.headers['x-content-source-authorization'] = `Bearer ${imsToken}`;
     }
   }
@@ -123,9 +123,9 @@ export async function workerFetchWithAuth(url, imsToken, opts = {}) {
   if (imsToken) {
     opts.headers.Authorization = `Bearer ${imsToken}`;
 
-    // For admin.hlx.page URLs, add x-content-source-authorization header
+    // For admin.entmseds.page URLs, add x-content-source-authorization header
     // This is required for Status API, Audit log, Media log (matches daFetch.js:27-29)
-    if (url.startsWith('https://admin.hlx.page')) {
+    if (url.startsWith('https://admin.entmseds.page')) {
       opts.headers['x-content-source-authorization'] = `Bearer ${imsToken}`;
     }
   } else {
@@ -194,7 +194,7 @@ export function createMultiSheet(sheets) {
  * Worker-safe version of loadSheet from admin-api.js
  *
  * @param {string} path - Path to sheet
- * @param {string} daOrigin - DA origin (e.g., 'https://admin.da.live')
+ * @param {string} daOrigin - DA origin (e.g., 'https://admin.entmseds-da.live')
  * @param {string} imsToken - IMS access token
  * @returns {Promise<Array>}
  */
@@ -297,7 +297,7 @@ export function timestampToDuration(timestamp) {
 }
 
 /**
- * Fetch paginated data from admin.hlx.page endpoints
+ * Fetch paginated data from admin.entmseds.page endpoints
  * Worker-safe version of fetchPaginated from admin-api.js
  *
  * @param {string} endpoint - Endpoint name (e.g., 'log', 'medialog')
@@ -327,7 +327,7 @@ export async function fetchPaginated(
   const sinceDuration = timestampToDuration(since);
   params.append('since', sinceDuration);
 
-  const baseUrl = `https://admin.hlx.page/${endpoint}/${org}/${repo}/${ref}`;
+  const baseUrl = `https://admin.entmseds.page/${endpoint}/${org}/${repo}/${ref}`;
   const separator = endpoint === 'medialog' ? '/' : '';
   const url = `${baseUrl}${separator}?${params.toString()}`;
 
@@ -385,7 +385,7 @@ function buildAemPageMarkdownUrl(pagePath, org, repo, ref = 'main') {
   if (path.endsWith('/')) path = `${path}index.md`;
   if (!path.endsWith('.md')) path = `${path}.md`;
 
-  return `https://${ref}--${repo}--${org}.aem.page${path}`;
+  return `https://${ref}--${repo}--${org}.entmseds.page${path}`;
 }
 
 /**
@@ -400,7 +400,7 @@ function appendNoCacheParam(url) {
 }
 
 /**
- * Fetch markdown from .aem.page using CORS proxy
+ * Fetch markdown from .entmseds.page using CORS proxy
  * Worker-safe version of fetchPageMarkdown from admin-api.js
  *
  * @param {string} pagePath - Page path
@@ -500,7 +500,7 @@ export async function createBulkStatusJob(
   contentPath = null,
   options = {},
 ) {
-  const url = `https://admin.hlx.page/status/${org}/${repo}/${ref}/*`;
+  const url = `https://admin.entmseds.page/status/${org}/${repo}/${ref}/*`;
   let paths;
 
   if (options.paths && options.paths.length > 0) {
@@ -671,7 +671,7 @@ export async function streamLog(
     fetchParams.append('since', sinceDuration);
   }
 
-  const baseUrl = `https://admin.hlx.page/${endpoint}/${org}/${repo}/${ref}`;
+  const baseUrl = `https://admin.entmseds.page/${endpoint}/${org}/${repo}/${ref}`;
   const separator = endpoint === 'medialog' ? '/' : '';
   let nextUrl = `${baseUrl}${separator}?${fetchParams.toString()}`;
 
@@ -771,7 +771,7 @@ export function getAdaptiveChunkSize(totalEntries) {
  * @param {string} basePath - Base path without filename (e.g., '/site/.da/media-insights')
  * @param {Array} mediaData - Media sheet data (must be pre-sorted)
  * @param {number} chunkSize - Entries per chunk (from getAdaptiveChunkSize)
- * @param {string} daOrigin - DA origin (e.g., 'https://admin.da.live')
+ * @param {string} daOrigin - DA origin (e.g., 'https://admin.entmseds-da.live')
  * @param {string} imsToken - IMS access token
  * @param {string} indexFilesChunkPrefix - Chunk filename prefix (e.g., 'index-')
  * @returns {Promise<number>} Number of chunks created
@@ -836,7 +836,7 @@ export async function saveIndexChunks(
  *
  * @param {object} meta - Metadata object containing indexType, timestamp, chunkCount, etc.
  * @param {string} path - Full path to meta file (e.g., '/site/.da/media-insights/index-meta.json')
- * @param {string} daOrigin - DA origin (e.g., 'https://admin.da.live')
+ * @param {string} daOrigin - DA origin (e.g., 'https://admin.entmseds-da.live')
  * @param {string} imsToken - IMS access token
  * @returns {Promise<Response>}
  */
@@ -853,7 +853,7 @@ export async function saveIndexMeta(meta, path, daOrigin, imsToken) {
  *
  * @param {string} path - Full path to multi-sheet file
  * @param {string} sheetName - Sheet name to load
- * @param {string} daOrigin - DA origin (e.g., https://admin.da.live)
+ * @param {string} daOrigin - DA origin (e.g., https://admin.entmseds-da.live)
  * @param {string} imsToken - IMS access token
  * @param {object} options - Options { allowMissing: boolean }
  * @returns {Promise<Array>} Sheet data array
@@ -901,7 +901,7 @@ export async function loadMultiSheet(path, sheetName, daOrigin, imsToken, option
  * @param {string} basePath - Base path for chunks
  * @param {number} chunkCount - Number of chunks
  * @param {string} sheetName - Sheet name to load
- * @param {string} daOrigin - DA origin (e.g., https://admin.da.live)
+ * @param {string} daOrigin - DA origin (e.g., https://admin.entmseds-da.live)
  * @param {string} imsToken - IMS access token
  * @param {Function} onProgressiveChunk - Optional progressive callback
  * @param {string} indexFilesChunkPrefix - Chunk file prefix (default: 'index-')

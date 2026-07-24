@@ -28,9 +28,9 @@ function formatDate(isoDate) {
 function buildItemLink(org, site, id, type) {
   if (type === 'page') {
     const path = id.startsWith('/') ? id : `/${id}`;
-    return `https://main--${site}--${org}.aem.page${path}`;
+    return `https://main--${site}--${org}.entmseds.page${path}`;
   }
-  return `https://da.live/apps/snapshots?snapshot=${encodeURIComponent(id)}#/${org}/${site}`;
+  return `https://entmseds-da.live/apps/snapshots?snapshot=${encodeURIComponent(id)}#/${org}/${site}`;
 }
 
 function formatDuration(isoDate) {

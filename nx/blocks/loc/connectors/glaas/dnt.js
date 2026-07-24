@@ -1,7 +1,7 @@
 let globalDntConfig;
 const ALT_TEXT_PLACEHOLDER = '*alt-placeholder*';
 
-const isAemHost = (hostname) => /\.(aem|hlx)\.(page|live)$/.test(hostname);
+const isAemHost = (hostname) => /\.entmseds\.(page|live)$/.test(hostname);
 
 const getHtmlSelector = (blockscope, blockConfig) => {
   const getChildSelector = (indexStr) => {
@@ -268,7 +268,7 @@ function resetHrefs(doc, org, repo) {
   const anchors = doc.querySelectorAll('[href^="/"]');
   anchors.forEach((a) => {
     const href = a.getAttribute('href');
-    a.href = `https://main--${repo}--${org}.aem.page${href}`;
+    a.href = `https://main--${repo}--${org}.entmseds.page${href}`;
   });
 }
 

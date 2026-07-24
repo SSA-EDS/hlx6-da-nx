@@ -1,5 +1,5 @@
 /* eslint-disable import/prefer-default-export */
-import prose2aem from 'https://da.live/blocks/shared/prose2aem.js';
+import prose2aem from 'https://entmseds-da.live/blocks/shared/prose2aem.js';
 
 const EDITABLES = [
   { selector: 'h1', nodeName: 'H1' },

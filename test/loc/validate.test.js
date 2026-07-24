@@ -8,8 +8,8 @@ describe('validate-utils', () => {
       const html = `
         <html>
           <body>
-            <img alt="https://main--site--adobecom.aem.page/fragments/video#xf | Video description | :play-medium:" />
-            <img alt="https://main--site--adobecom.aem.page/fragments/banner#xf | Banner description" />
+            <img alt="https://main--site--adobecom.entmseds.page/fragments/video#xf | Video description | :play-medium:" />
+            <img alt="https://main--site--adobecom.entmseds.page/fragments/banner#xf | Banner description" />
             <img alt="Regular image description" />
           </body>
         </html>
@@ -35,17 +35,17 @@ describe('validate-utils', () => {
       const html = `
         <html>
           <body>
-            <a href="https://main--site--adobecom.aem.page/fragments/header">Header</a>
-            <a href="https://main--site--adobecom.aem.page/fragments/footer">Footer</a>
-            <img alt="https://main--site--adobecom.aem.page/fragments/video#xf | Video description" />
+            <a href="https://main--site--adobecom.entmseds.page/fragments/header">Header</a>
+            <a href="https://main--site--adobecom.entmseds.page/fragments/footer">Footer</a>
+            <img alt="https://main--site--adobecom.entmseds.page/fragments/video#xf | Video description" />
             <img alt="Regular image description" />
           </body>
         </html>
       `;
       const urls = getFragmentUrls(html);
-      expect(urls).to.include('https://main--site--adobecom.aem.page/fragments/header');
-      expect(urls).to.include('https://main--site--adobecom.aem.page/fragments/footer');
-      expect(urls).to.include('https://main--site--adobecom.aem.page/fragments/video#xf ');
+      expect(urls).to.include('https://main--site--adobecom.entmseds.page/fragments/header');
+      expect(urls).to.include('https://main--site--adobecom.entmseds.page/fragments/footer');
+      expect(urls).to.include('https://main--site--adobecom.entmseds.page/fragments/video#xf ');
       expect(urls).to.have.length(3);
     });
 

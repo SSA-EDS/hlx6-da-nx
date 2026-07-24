@@ -12,8 +12,8 @@ await import('../../public/sl/components.js');
 
 const TRUSTED_ORGS = ['adobe'];
 const TRUSTED_APPS = [
-  'https://main--storefront-tools--adobe-commerce.aem.live/tools/site-creator/site-creator.html',
-  'https://main--storefront-tools--adobe-commerce.aem.live/tools/config-generator/config-generator.html',
+  'https://main--storefront-tools--adobe-commerce.entmseds.live/tools/site-creator/site-creator.html',
+  'https://main--storefront-tools--adobe-commerce.entmseds.live/tools/config-generator/config-generator.html',
 ];
 
 /**
@@ -59,7 +59,7 @@ function getUrl() {
     org, repo, ref, path, search, hash,
   } = getParts();
   if (ref === 'local') return `http://localhost:3000/${path}.html${search}${hash}`;
-  return `https://${ref}--${repo}--${org}.aem.live/${path}.html${search}${hash}`;
+  return `https://${ref}--${repo}--${org}.entmseds.live/${path}.html${search}${hash}`;
 }
 
 /**

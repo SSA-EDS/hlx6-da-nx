@@ -21,30 +21,30 @@ describe('constants - environment resolution', () => {
 
     it('returns prod origin by default', () => {
       const location = {
-        href: 'https://da.live/apps/media-library',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library',
+        origin: 'https://entmseds-da.live',
       };
 
       const result = resolveDaOrigin(location);
-      expect(result).to.equal('https://admin.da.live');
+      expect(result).to.equal('https://admin.entmseds-da.live');
     });
 
     it('persists ?da-admin=stage to localStorage', () => {
       const location = {
-        href: 'https://da.live/apps/media-library?da-admin=stage',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=stage',
+        origin: 'https://entmseds-da.live',
       };
 
       const result = resolveDaOrigin(location);
 
       expect(localStorage.getItem('da-admin')).to.equal('stage');
-      expect(result).to.equal('https://stage-admin.da.live');
+      expect(result).to.equal('https://stage-admin.entmseds-da.live');
     });
 
     it('persists ?da-admin=local to localStorage', () => {
       const location = {
-        href: 'https://da.live/apps/media-library?da-admin=local',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=local',
+        origin: 'https://entmseds-da.live',
       };
 
       const result = resolveDaOrigin(location);
@@ -58,14 +58,14 @@ describe('constants - environment resolution', () => {
       localStorage.setItem('da-admin', 'stage');
 
       const location = {
-        href: 'https://da.live/apps/media-library?da-admin=reset',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=reset',
+        origin: 'https://entmseds-da.live',
       };
 
       const result = resolveDaOrigin(location);
 
       expect(localStorage.getItem('da-admin')).to.be.null;
-      expect(result).to.equal('https://admin.da.live'); // Falls back to prod
+      expect(result).to.equal('https://admin.entmseds-da.live'); // Falls back to prod
     });
 
     it('uses persisted localStorage value when no query param', () => {
@@ -73,39 +73,39 @@ describe('constants - environment resolution', () => {
       localStorage.setItem('da-admin', 'stage');
 
       const location = {
-        href: 'https://da.live/apps/media-library',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library',
+        origin: 'https://entmseds-da.live',
       };
 
       const result = resolveDaOrigin(location);
 
-      expect(result).to.equal('https://stage-admin.da.live');
+      expect(result).to.equal('https://stage-admin.entmseds-da.live');
     });
 
-    it('replaces .live with .page for da.page origin', () => {
+    it('replaces .live with .page for entmseds-da.page origin', () => {
       localStorage.setItem('da-admin', 'stage');
 
       const location = {
-        href: 'https://da.page/apps/media-library',
-        origin: 'https://da.page',
+        href: 'https://entmseds-da.page/apps/media-library',
+        origin: 'https://entmseds-da.page',
       };
 
       const result = resolveDaOrigin(location);
 
-      expect(result).to.equal('https://stage-admin.da.page');
+      expect(result).to.equal('https://stage-admin.entmseds-da.page');
     });
 
     it('handles invalid environment gracefully', () => {
       const location = {
-        href: 'https://da.live/apps/media-library?da-admin=invalid',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=invalid',
+        origin: 'https://entmseds-da.live',
       };
 
       const result = resolveDaOrigin(location);
 
       // Should persist the value but fall back to prod
       expect(localStorage.getItem('da-admin')).to.equal('invalid');
-      expect(result).to.equal('https://admin.da.live');
+      expect(result).to.equal('https://admin.entmseds-da.live');
     });
 
     // Worker context test skipped - implementation uses typeof localStorage !== 'undefined'
@@ -115,7 +115,7 @@ describe('constants - environment resolution', () => {
   describe('resolveDaEtcOrigin', () => {
     it('returns prod by default', () => {
       const location = {
-        href: 'https://da.live/apps/media-library',
+        href: 'https://entmseds-da.live/apps/media-library',
       };
 
       const result = resolveDaEtcOrigin(location);
@@ -124,7 +124,7 @@ describe('constants - environment resolution', () => {
 
     it('returns local when ?da-etc=local', () => {
       const location = {
-        href: 'https://da.live/apps/media-library?da-etc=local',
+        href: 'https://entmseds-da.live/apps/media-library?da-etc=local',
       };
 
       const result = resolveDaEtcOrigin(location);
@@ -133,7 +133,7 @@ describe('constants - environment resolution', () => {
 
     it('returns custom URL when ?da-etc=custom', () => {
       const location = {
-        href: 'https://da.live/apps/media-library?da-etc=https://custom-etc.example.com',
+        href: 'https://entmseds-da.live/apps/media-library?da-etc=https://custom-etc.example.com',
       };
 
       const result = resolveDaEtcOrigin(location);
@@ -158,65 +158,65 @@ describe('constants - environment resolution', () => {
     it('supports stage workflow: set → persist → use', () => {
       // Step 1: User adds ?da-admin=stage
       const location1 = {
-        href: 'https://da.live/apps/media-library?da-admin=stage',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=stage',
+        origin: 'https://entmseds-da.live',
       };
       resolveDaOrigin(location1);
       expect(localStorage.getItem('da-admin')).to.equal('stage');
 
       // Step 2: User navigates without query param
       const location2 = {
-        href: 'https://da.live/apps/media-library',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library',
+        origin: 'https://entmseds-da.live',
       };
       const result = resolveDaOrigin(location2);
 
       // Should still use stage from localStorage
-      expect(result).to.equal('https://stage-admin.da.live');
+      expect(result).to.equal('https://stage-admin.entmseds-da.live');
     });
 
     it('supports reset workflow: stage → reset → prod', () => {
       // User was on stage
       localStorage.setItem('da-admin', 'stage');
       let result = resolveDaOrigin({
-        href: 'https://da.live/apps/media-library',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library',
+        origin: 'https://entmseds-da.live',
       });
-      expect(result).to.equal('https://stage-admin.da.live');
+      expect(result).to.equal('https://stage-admin.entmseds-da.live');
 
       // User resets
       resolveDaOrigin({
-        href: 'https://da.live/apps/media-library?da-admin=reset',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=reset',
+        origin: 'https://entmseds-da.live',
       });
 
       // Should now be on prod
       result = resolveDaOrigin({
-        href: 'https://da.live/apps/media-library',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library',
+        origin: 'https://entmseds-da.live',
       });
-      expect(result).to.equal('https://admin.da.live');
+      expect(result).to.equal('https://admin.entmseds-da.live');
     });
 
     it('supports switch workflow: stage → local → stage', () => {
       // Start on stage
       resolveDaOrigin({
-        href: 'https://da.live/apps/media-library?da-admin=stage',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=stage',
+        origin: 'https://entmseds-da.live',
       });
       expect(localStorage.getItem('da-admin')).to.equal('stage');
 
       // Switch to local
       resolveDaOrigin({
-        href: 'https://da.live/apps/media-library?da-admin=local',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=local',
+        origin: 'https://entmseds-da.live',
       });
       expect(localStorage.getItem('da-admin')).to.equal('local');
 
       // Switch back to stage
       resolveDaOrigin({
-        href: 'https://da.live/apps/media-library?da-admin=stage',
-        origin: 'https://da.live',
+        href: 'https://entmseds-da.live/apps/media-library?da-admin=stage',
+        origin: 'https://entmseds-da.live',
       });
       expect(localStorage.getItem('da-admin')).to.equal('stage');
     });

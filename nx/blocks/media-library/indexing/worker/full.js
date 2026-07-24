@@ -67,9 +67,9 @@ function logPerf(perf, isPerfEnabled) {
  * @param {Function} onProgressiveData - Progressive data callback
  * @param {object} context - Worker runtime context
  * @param {string} context.imsToken - IMS access token (REQUIRED)
- * @param {string} context.daOrigin - DA origin (e.g., https://admin.da.live) (REQUIRED)
+ * @param {string} context.daOrigin - DA origin (e.g., https://admin.entmseds-da.live) (REQUIRED)
  * @param {string} context.daEtcOrigin - DA ETC origin for CORS proxy (REQUIRED)
- * @param {string} context.siteToken - Site token for protected .aem.page sites (optional)
+ * @param {string} context.siteToken - Site token for protected .entmseds.page sites (optional)
  * @param {boolean} context.isPerfEnabled - Enable perf logging
  * @param {object} context.IndexConfig - Index configuration constants (REQUIRED)
  */

@@ -5,7 +5,7 @@ const AUTO_BLOCKS = [
 
 export const env = (() => {
   const { host } = window.location;
-  if (host.endsWith('.aem.live')) return 'prod';
+  if (host.endsWith('.entmseds.live')) return 'prod';
   if (!['--', 'local'].some((check) => host.includes(check))) return 'prod';
   if (['--'].some((check) => host.includes(check))) return 'stage';
   return 'dev';

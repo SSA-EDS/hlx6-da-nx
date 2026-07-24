@@ -21,7 +21,7 @@ const MESSAGES = {
   VALIDATION_PATH_NOT_FOUND_SUGGESTION: 'Check that {segment} exists in {parentPath}',
   VALIDATION_PATH_EMPTY: 'Parent path not found or empty: {path}',
   VALIDATION_SITE_PATH_FILE: 'Site path cannot point to a file',
-  VALIDATION_ENTER_SITE_URL: 'Enter a site URL to start. Example: https://main--site--org.aem.page',
+  VALIDATION_ENTER_SITE_URL: 'Enter a site URL to start. Example: https://main--site--org.entmseds.page',
   DA_WRITE_DENIED: "Couldn't save your media results. You can still browse current results, but your changes weren't saved. Try again, refresh the page, or contact your admin for write access.",
   DA_SAVE_FAILED: "Couldn't save your media results. You can still browse current results, but your changes weren't saved. Try again, refresh the page, or contact your admin.",
   PARTIAL_SAVE: "Some save steps didn't complete. Media results may be incomplete or out of date. Try refreshing the page.",

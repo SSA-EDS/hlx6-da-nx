@@ -1,8 +1,164 @@
-import { DA_ORIGIN } from '../../../../public/utils/constants.js';
-import { daFetch } from '../../../../utils/daFetch.js';
-import { buildGlaasCreateMetadata, getOpts, glaasSourcePreviewUrl } from './api.js';
+import { DA_ADMIN } from '../../../../../nx2/utils/utils.js';
+import { Queue } from '../../../../../nx2/public/utils/tree.js';
+import { daFetch } from '../../../../../nx2/utils/api.js';
+import {
+  buildGlaasCreateMetadata,
+  getOpts,
+  glaasSourcePreviewUrl,
+  shouldLogGLaaSRequests,
+  throttle,
+} from './api.js';
 
-const MULTIMODAL_LOG_KEY = 'glaas.multimodal.log';
+export { shouldLogGLaaSRequests } from './api.js';
+
+function logMultimodalDebug(logRequest, step, detail, { level = 'info' } = {}) {
+  if (logRequest) {
+    logRequest(step, detail);
+    return;
+  }
+  if (!shouldLogGLaaSRequests()) return;
+  const fn = level === 'warn' ? console.warn : console.info;
+  // eslint-disable-next-line no-console -- dev GLaaS handoff (glaas.log)
+  fn('[GLaaS multimodal]', step, detail);
+}
+/** Documented GLaaS budget is 120/min per client id; target 100 for shared-stage headroom. */
+const GLAAS_API_LIMIT_PER_MINUTE = 100;
+const GLAAS_API_WINDOW_MS = 60_000;
+const GLAAS_API_MIN_INTERVAL_MS = Math.ceil(
+  GLAAS_API_WINDOW_MS / GLAAS_API_LIMIT_PER_MINUTE,
+);
+const IMAGE_FETCH_QUEUE_CONCURRENCY = 5;
+const IMAGE_SAVE_QUEUE_CONCURRENCY = 5;
+const IMAGE_UPLOAD_QUEUE_CONCURRENCY = 3;
+const V2_PROBE_QUEUE_CONCURRENCY = 3;
+const IMAGE_PUSH_INTERVAL_MS = 250;
+const PUT_URL_MAX_RETRIES = 4;
+const PUT_URL_RETRY_WAIT_MS = 1000;
+const PUT_URL_429_FALLBACK_DELAY_MS = Math.ceil(GLAAS_API_WINDOW_MS / 2) + 250;
+export const MEDIA_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+export const MEDIA_IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+
+export function createPutUrlRollingLimiter({
+  limitPerWindow = GLAAS_API_LIMIT_PER_MINUTE,
+  windowMs = GLAAS_API_WINDOW_MS,
+  minIntervalMs = GLAAS_API_MIN_INTERVAL_MS,
+} = {}) {
+  let chain = Promise.resolve();
+  let timestamps = [];
+  let lastAcquireAt = 0;
+
+  const prune = (now) => {
+    timestamps = timestamps.filter((t) => now - t < windowMs);
+  };
+
+  return {
+    windowRetryDelayMs(now = Date.now()) {
+      prune(now);
+      if (timestamps.length >= limitPerWindow) {
+        return timestamps[0] + windowMs - now + 250;
+      }
+      return 0;
+    },
+    async acquire() {
+      const previous = chain;
+      let release;
+      chain = new Promise((resolve) => { release = resolve; });
+      await previous;
+      try {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const now = Date.now();
+          prune(now);
+          const waitForWindow = timestamps.length >= limitPerWindow
+            ? timestamps[0] + windowMs - now
+            : 0;
+          const waitForSpacing = Math.max(0, lastAcquireAt + minIntervalMs - now);
+          const waitMs = Math.max(waitForWindow, waitForSpacing);
+          if (waitMs > 0) {
+            await throttle(waitMs);
+            // eslint-disable-next-line no-continue
+            continue;
+          }
+          lastAcquireAt = now;
+          timestamps.push(now);
+          return;
+        }
+      } finally {
+        release();
+      }
+    },
+    reset() {
+      chain = Promise.resolve();
+      timestamps = [];
+      lastAcquireAt = 0;
+    },
+  };
+}
+
+const glaasApiLimiter = createPutUrlRollingLimiter();
+
+async function acquireGlaasApiSlot() {
+  await glaasApiLimiter.acquire();
+}
+
+function putUrlOpaqueRetryDelayMs({ waitInterval }) {
+  const windowWait = glaasApiLimiter.windowRetryDelayMs();
+  if (windowWait > 0) return windowWait;
+  return Math.max(waitInterval, PUT_URL_429_FALLBACK_DELAY_MS);
+}
+
+function putUrlReactiveRetryDelayMs({ waitInterval }) {
+  return Math.max(
+    waitInterval,
+    glaasApiLimiter.windowRetryDelayMs() || PUT_URL_429_FALLBACK_DELAY_MS,
+  );
+}
+
+export function resetPutUrlRateLimitGateForTests() {
+  glaasApiLimiter.reset();
+}
+
+function getPutUrlRateLimitHeaders(resp) {
+  return {
+    retryAfter: resp.headers.get('retry-after'),
+    xRateLimitRetryAfterSeconds: resp.headers.get('x-rate-limit-retry-after-seconds'),
+  };
+}
+
+function getMillisToSleep(retryHeaderString) {
+  if (typeof retryHeaderString === 'string' && retryHeaderString) {
+    const millisToSleep = Math.round(parseFloat(retryHeaderString) * 1000);
+    if (!Number.isNaN(millisToSleep) && millisToSleep > 0) return millisToSleep;
+    const dateDiff = new Date(retryHeaderString) - Date.now();
+    if (dateDiff > 0) return dateDiff;
+  }
+  return -1;
+}
+
+function putUrl429RetryDelayMs({ resp, waitInterval }) {
+  const { retryAfter, xRateLimitRetryAfterSeconds } = getPutUrlRateLimitHeaders(resp);
+  const retryIn = getMillisToSleep(retryAfter || xRateLimitRetryAfterSeconds || '');
+  if (retryIn > 0) return retryIn + 250;
+  return putUrlReactiveRetryDelayMs({ waitInterval });
+}
+
+async function backoffPutUrl429({
+  waitMs,
+  logRequest,
+  attempt,
+  assetName,
+  status,
+  detail = {},
+}) {
+  logRequest?.('getPutURL-retry', {
+    status,
+    attempt: attempt + 1,
+    waitMs,
+    assetName,
+    ...detail,
+  });
+  await throttle(waitMs);
+}
 
 function putUrlAssetName(assetName) {
   return assetName.replace(/^\/+/, '').replaceAll('/', '-');
@@ -30,34 +186,65 @@ export function buildTranslatedMediaPath({ langCode, glaasName }) {
   return `/${locale}${base}`;
 }
 
-export function shouldLogMultimodalRequests() {
-  try {
-    return localStorage.getItem(MULTIMODAL_LOG_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
 export function logMultimodalRequest(step, detail) {
-  // eslint-disable-next-line no-console -- dev multimodal handoff
-  console.info('[GLaaS multimodal]', step, detail);
+  logMultimodalDebug(undefined, step, detail);
 }
 
-export async function getPutUrlForFile({ origin, clientid, token, assetName, logRequest }) {
+export async function getPutUrlForFile({
+  origin,
+  clientid,
+  token,
+  assetName,
+  logRequest,
+  maxRetries = PUT_URL_MAX_RETRIES,
+}) {
   const opts = getOpts(clientid, token);
   const pathName = putUrlAssetName(assetName);
   const url = `${origin}/api/l10n/v1.1/asset/getPutURLForFile/${pathName}`;
   logRequest?.('getPutURL', { method: 'GET', url, assetName, wireName: pathName });
-  try {
-    const resp = await fetch(url, opts);
-    const json = await resp.json();
-    if (!resp.ok) return { error: 'Error getting put URL for file.', status: resp.status, json };
-    if (!json.putURL) return { error: 'Missing putURL in response.', status: resp.status, json };
-    logRequest?.('getPutURL-response', { status: resp.status, assetName });
-    return { putURL: json.putURL, instanceId: json.instanceId, status: resp.status };
-  } catch {
-    return { error: 'Error getting put URL for file.' };
+
+  let waitInterval = PUT_URL_RETRY_WAIT_MS;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      await acquireGlaasApiSlot();
+      const resp = await fetch(url, opts);
+      if (resp.status === 429 && attempt < maxRetries) {
+        waitInterval *= 2;
+        const waitMs = putUrl429RetryDelayMs({ resp, waitInterval });
+        await backoffPutUrl429({
+          waitMs,
+          logRequest,
+          attempt,
+          assetName,
+          status: 429,
+          detail: getPutUrlRateLimitHeaders(resp),
+        });
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      const json = await resp.json();
+      if (!resp.ok) return { error: 'Error getting put URL for file.', status: resp.status, json };
+      if (!json.putURL) return { error: 'Missing putURL in response.', status: resp.status, json };
+      logRequest?.('getPutURL-response', { status: resp.status, assetName });
+      return { putURL: json.putURL, instanceId: json.instanceId, status: resp.status };
+    } catch (e) {
+      if (attempt < maxRetries) {
+        const waitMs = putUrlOpaqueRetryDelayMs({ waitInterval });
+        await backoffPutUrl429({
+          waitMs,
+          logRequest,
+          attempt,
+          assetName,
+          status: 'fetch-error',
+          detail: { error: String(e) },
+        });
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      return { error: 'Error getting put URL for file.' };
+    }
   }
+  return { error: 'Error getting put URL for file.' };
 }
 
 function contentTypeForPutUrl(putURL, contentType) {
@@ -118,10 +305,7 @@ export async function createMultimodalTask({
 
   const url = `${origin}/api/l10n/v2.0/tasks/${product}/${project}/create`;
   logRequest?.('v2-create', { method: 'POST', url, body });
-  if (logRequest) {
-    // eslint-disable-next-line no-console -- dev handoff
-    console.info('[GLaaS multimodal] v2-create-body-json\n', JSON.stringify(body, null, 2));
-  }
+  logMultimodalDebug(logRequest, 'v2-create-body-json\n', JSON.stringify(body, null, 2));
   const opts = getOpts(clientid, token, JSON.stringify(body), 'application/json', 'POST');
   try {
     const resp = await fetch(url, opts);
@@ -146,9 +330,15 @@ export async function getV2Asset(service, token, task, assetName) {
   const [product = '', project = ''] = workflow?.split('/') ?? [];
   const opts = getOpts(clientid, token);
   try {
+    await acquireGlaasApiSlot();
     const path = ensureLeadingSlash(assetName);
     const resp = await fetch(`${origin}/api/l10n/v2.0/tasks/${product}/${project}/${taskName}/assets/${lang}${path}`, opts);
-    const json = await resp.json();
+    let json;
+    try {
+      json = await resp.json();
+    } catch {
+      json = null;
+    }
     return { status: resp.status, json };
   } catch {
     return { error: 'Error getting v2 asset.' };
@@ -180,18 +370,7 @@ export async function fetchBlobFromSignedUrl(signedURL) {
   }
 }
 
-const CONTENT_DA_LIVE = 'content.da.live';
-
-/** One srcset candidate URL; strips trailing width/density descriptor (e.g. 600w, 2x) only. */
-export function parseSrcsetUrl(part) {
-  const trimmed = part.trim();
-  if (!trimmed) return '';
-  return trimmed.replace(/\s+\d+(?:\.\d+)?[wx]\s*$/i, '').trim();
-}
-
-function collectSrcsetUrls(srcset) {
-  return srcset.split(',').map(parseSrcsetUrl).filter(Boolean);
-}
+const CONTENT_DA_LIVE = 'content.entmseds-da.live';
 
 /** Encode delivery URL for HTML src/srcset (spaces → %20, valid srcset). */
 export function contentDaLiveHrefForAttribute(href) {
@@ -223,18 +402,29 @@ function isProjectContentDaLiveUrl(href, org, site) {
   }
 }
 
-/** MVP: absolute https://content.da.live/... image URLs only (not relative ./media_ from DNT). */
+const GLAAS_MULTIMODAL_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg']);
+
+function isGlaasMultimodalImageUrl(href) {
+  try {
+    const pathname = decodeURIComponent(new URL(href).pathname);
+    const filename = pathname.split('/').pop() ?? '';
+    const dot = filename.lastIndexOf('.');
+    if (dot === -1) return false;
+    return GLAAS_MULTIMODAL_IMAGE_EXTS.has(filename.slice(dot + 1).toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/** MVP: absolute https://content.entmseds-da.live/... png/jpeg image URLs from img[src] only. */
 export function collectContentDaLiveImageUrls(html, { org, site } = {}) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const urls = new Set();
   doc.querySelectorAll('img[src]').forEach((img) => {
     const src = img.getAttribute('src');
-    if (isProjectContentDaLiveUrl(src, org, site)) urls.add(new URL(src).href);
-  });
-  doc.querySelectorAll('source[srcset]').forEach((source) => {
-    collectSrcsetUrls(source.getAttribute('srcset') || '').forEach((src) => {
-      if (isProjectContentDaLiveUrl(src, org, site)) urls.add(new URL(src).href);
-    });
+    if (isProjectContentDaLiveUrl(src, org, site) && isGlaasMultimodalImageUrl(src)) {
+      urls.add(new URL(src).href);
+    }
   });
   return [...urls];
 }
@@ -243,7 +433,7 @@ const CONTENT_DA_LIVE_ORIGIN = `https://${CONTENT_DA_LIVE}`;
 
 /** Map delivery URL to DA Admin source (same path after /source/). */
 export function contentDaLiveToDaSourceUrl(imageUrl) {
-  return imageUrl.replace(CONTENT_DA_LIVE_ORIGIN, `${DA_ORIGIN}/source`);
+  return imageUrl.replace(CONTENT_DA_LIVE_ORIGIN, `${DA_ADMIN}/source`);
 }
 
 export function contentDaLivePathKey(href) {
@@ -256,20 +446,7 @@ export function contentDaLivePathKey(href) {
   }
 }
 
-function replaceSrcsetUrls(srcset, resolveNewUrl) {
-  return srcset.split(',').map((part) => {
-    const trimmed = part.trim();
-    if (!trimmed) return part;
-    const src = parseSrcsetUrl(trimmed);
-    const descriptor = trimmed.slice(src.length).trim();
-    const resolved = resolveNewUrl(src);
-    if (!resolved) return part;
-    const encoded = contentDaLiveHrefForAttribute(resolved);
-    return descriptor ? `${encoded} ${descriptor}` : encoded;
-  }).join(', ');
-}
-
-/** Replace content.da.live image URLs using pathname → new delivery URL map. */
+/** Replace content.entmseds-da.live image URLs using pathname → new delivery URL map. */
 export function rewriteContentDaLiveImageUrls(html, pathToNewUrl) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const resolveNewUrl = (href) => {
@@ -280,12 +457,14 @@ export function rewriteContentDaLiveImageUrls(html, pathToNewUrl) {
 
   doc.querySelectorAll('img[src]').forEach((img) => {
     const next = resolveNewUrl(img.getAttribute('src'));
-    if (next) img.setAttribute('src', contentDaLiveHrefForAttribute(next));
-  });
-  doc.querySelectorAll('source[srcset]').forEach((source) => {
-    const srcset = source.getAttribute('srcset');
-    if (!srcset) return;
-    source.setAttribute('srcset', replaceSrcsetUrls(srcset, resolveNewUrl));
+    if (!next) return;
+    const encoded = contentDaLiveHrefForAttribute(next);
+    img.setAttribute('src', encoded);
+    const picture = img.closest('picture');
+    if (!picture) return;
+    picture.querySelectorAll('source[srcset]').forEach((source) => {
+      source.setAttribute('srcset', encoded);
+    });
   });
 
   return doc.documentElement?.querySelector('body')?.innerHTML
@@ -325,17 +504,56 @@ export function v2AssetStatusFromProbe(assetName, meta) {
   };
 }
 
+async function runImageQueue({
+  items,
+  processItem,
+  concurrency = IMAGE_SAVE_QUEUE_CONCURRENCY,
+  pushIntervalMs,
+}) {
+  if (!items.length) return { results: [] };
+
+  let firstError;
+  const results = [];
+  const queue = new Queue(async (item) => {
+    if (firstError) return;
+    const result = await processItem(item);
+    if (result?.error) {
+      firstError = result;
+      return;
+    }
+    results.push(result);
+  }, concurrency);
+
+  if (pushIntervalMs) {
+    const pending = [];
+    for (let i = 0; i < items.length; i += 1) {
+      if (i > 0) await throttle(pushIntervalMs);
+      pending.push(queue.push(items[i]));
+    }
+    await Promise.all(pending);
+  } else {
+    await Promise.all(items.map((item) => queue.push(item)));
+  }
+
+  if (firstError) return { error: firstError };
+  return { results };
+}
+
 async function probeMultimodalAssetStatuses({
   service, token, task, langCode, assetNames,
 }) {
   const langTask = { ...task, code: langCode };
-  const probes = await Promise.all(
-    assetNames.map(async (assetName) => {
+  const queued = await runImageQueue({
+    items: assetNames,
+    concurrency: V2_PROBE_QUEUE_CONCURRENCY,
+    processItem: async (assetName) => {
       const meta = await getV2Asset(service, token, langTask, assetName);
+      if (meta.error) return meta;
       return v2AssetStatusFromProbe(assetName, meta);
-    }),
-  );
-  return probes;
+    },
+  });
+  if (queued.error) return { error: queued.error };
+  return queued.results ?? [];
 }
 
 /**
@@ -350,29 +568,31 @@ export async function getMultimodalV2TaskStatus({
     return { status: 404, json: [] };
   }
 
-  const subtasks = await Promise.all(
-    langs.map(async (lang) => {
-      const assets = await probeMultimodalAssetStatuses({
-        service,
-        token,
-        task,
-        langCode: lang.code,
-        assetNames,
-      });
-      const allCompleted = assets.every((asset) => asset.status === 'COMPLETED');
-      return {
+  const subtasks = [];
+  for (const lang of langs) {
+    // eslint-disable-next-line no-await-in-loop
+    const assets = await probeMultimodalAssetStatuses({
+      service,
+      token,
+      task,
+      langCode: lang.code,
+      assetNames,
+    });
+    if (assets?.error) {
+      subtasks.push({
         targetLocale: lang.code,
-        status: allCompleted ? 'COMPLETED' : 'IN_PROGRESS',
-        assets,
-      };
-    }),
-  );
-
-  const anyNotFound = subtasks.some((subtask) => (
-    subtask.assets.some((asset) => asset.status === 'NOT_FOUND')
-  ));
-  if (anyNotFound) {
-    return { status: 404, json: subtasks };
+        status: 'IN_PROGRESS',
+        assets: [],
+      });
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+    const allCompleted = assets.every((asset) => asset.status === 'COMPLETED');
+    subtasks.push({
+      targetLocale: lang.code,
+      status: allCompleted ? 'COMPLETED' : 'IN_PROGRESS',
+      assets,
+    });
   }
 
   return { status: 200, json: subtasks };
@@ -427,6 +647,74 @@ export function buildMultimodalTextAsset({
   };
 }
 
+async function fetchMultimodalImage({ imageIndex, imageUrl, logRequest }) {
+  const imageAssetName = siteRelativePathFromContentDaLiveUrl(imageUrl);
+  const imageSourceUrl = contentDaLiveToDaSourceUrl(imageUrl);
+  logRequest?.('fetch-image', { imageIndex, contentDaLiveUrl: imageUrl, daSourceUrl: imageSourceUrl });
+  let imageResp;
+  try {
+    imageResp = await daFetch({ url: imageSourceUrl });
+  } catch {
+    return { error: 'Error fetching content.entmseds-da.live image.', step: `fetch-image-${imageIndex}` };
+  }
+  if (!imageResp.ok) {
+    return {
+      error: 'Error fetching content.entmseds-da.live image.',
+      step: `fetch-image-${imageIndex}`,
+      status: imageResp.status,
+    };
+  }
+
+  const imageBlob = await imageResp.blob();
+  return {
+    imageIndex,
+    imageUrl,
+    imageAssetName,
+    imageBlob,
+  };
+}
+
+async function uploadFetchedMultimodalImage({
+  imageIndex,
+  imageUrl,
+  imageAssetName,
+  imageBlob,
+  origin,
+  clientid,
+  token,
+  pagePath,
+  pagePreviewUrl,
+  targetLocales,
+  logRequest,
+}) {
+  const imagePut = await getPutUrlForFile({
+    origin, clientid, token, assetName: imageAssetName, logRequest,
+  });
+  if (imagePut.error) return { error: imagePut.error, step: `getPutURL-image-${imageIndex}`, ...imagePut };
+
+  const imageUpload = await putAssetToSignedUrl({
+    putURL: imagePut.putURL,
+    body: imageBlob,
+    contentType: imageBlob.type || 'image/png',
+    logRequest,
+    putLabel: `image-${imageIndex}`,
+  });
+  if (imageUpload.error) return { error: imageUpload.error, step: `put-image-${imageIndex}`, ...imageUpload };
+
+  return {
+    asset: {
+      type: 'IMAGE',
+      name: ensureLeadingSlash(imageAssetName),
+      parentAsset: pagePath,
+      signedUrl: imagePut.putURL,
+      targetLocales,
+      ...(pagePreviewUrl && { sourcePreviewUrlPage: pagePreviewUrl }),
+    },
+    imageUrl,
+    imageIndex,
+  };
+}
+
 export async function uploadMultimodalPageAssets({
   origin,
   clientid,
@@ -471,53 +759,40 @@ export async function uploadMultimodalPageAssets({
   let imageUrls = collectContentDaLiveImageUrls(htmlContent, { org, site });
   if (maxImages != null) imageUrls = imageUrls.slice(0, maxImages);
   logRequest?.('collect-images', { htmlAssetName, org, site, count: imageUrls.length, imageUrls });
-  const sentImageUrls = [];
 
-  for (let i = 0; i < imageUrls.length; i += 1) {
-    const n = i + 1;
-    const imageUrl = imageUrls[i];
-    const imageAssetName = siteRelativePathFromContentDaLiveUrl(imageUrl);
-    const imageSourceUrl = contentDaLiveToDaSourceUrl(imageUrl);
-    logRequest?.('fetch-image', { n, contentDaLiveUrl: imageUrl, daSourceUrl: imageSourceUrl });
-    let imageResp;
-    try {
-      imageResp = await daFetch(imageSourceUrl);
-    } catch {
-      return { error: 'Error fetching content.da.live image.', step: `fetch-image-${n}` };
-    }
-    if (!imageResp.ok) {
-      return {
-        error: 'Error fetching content.da.live image.',
-        step: `fetch-image-${n}`,
-        status: imageResp.status,
-      };
-    }
-
-    const imagePut = await getPutUrlForFile({
-      origin, clientid, token, assetName: imageAssetName, logRequest,
-    });
-    if (imagePut.error) return { error: imagePut.error, step: `getPutURL-image-${n}`, ...imagePut };
-
-    const imageBlob = await imageResp.blob();
-    const imageUpload = await putAssetToSignedUrl({
-      putURL: imagePut.putURL,
-      body: imageBlob,
-      contentType: imageBlob.type || 'image/png',
+  const imageItems = imageUrls.map((imageUrl, index) => ({ imageIndex: index + 1, imageUrl }));
+  const { error: fetchError, results: fetchedImages } = await runImageQueue({
+    items: imageItems,
+    concurrency: IMAGE_FETCH_QUEUE_CONCURRENCY,
+    processItem: ({ imageIndex, imageUrl }) => fetchMultimodalImage({
+      imageIndex,
+      imageUrl,
       logRequest,
-      putLabel: `image-${n}`,
-    });
-    if (imageUpload.error) return { error: imageUpload.error, step: `put-image-${n}`, ...imageUpload };
+    }),
+  });
+  if (fetchError) return fetchError;
 
-    assets.push({
-      type: 'IMAGE',
-      name: ensureLeadingSlash(imageAssetName),
-      parentAsset: pagePath,
-      signedUrl: imagePut.putURL,
+  const { error: imageError, results: imageResults } = await runImageQueue({
+    items: fetchedImages,
+    concurrency: IMAGE_UPLOAD_QUEUE_CONCURRENCY,
+    processItem: (fetched) => uploadFetchedMultimodalImage({
+      ...fetched,
+      origin,
+      clientid,
+      token,
+      pagePath,
+      pagePreviewUrl,
       targetLocales,
-      ...(pagePreviewUrl && { sourcePreviewUrlPage: pagePreviewUrl }),
-    });
-    sentImageUrls.push(imageUrl);
-  }
+      logRequest,
+    }),
+  });
+  if (imageError) return imageError;
+
+  imageResults.sort((a, b) => a.imageIndex - b.imageIndex);
+  const sentImageUrls = imageResults.map((result) => result.imageUrl);
+  imageResults.forEach((result) => {
+    assets.push(result.asset);
+  });
 
   const pageAsset = buildMultimodalPageAssetEntry({ htmlAssetName, imageUrls: sentImageUrls });
   logRequest?.('upload-page-assets', { htmlAssetName, assetCount: assets.length, pageAsset });
@@ -572,17 +847,89 @@ export function blobContentTypeForDaSource({ daSourcePath, blob, contentType }) 
   return contentType || blob?.type || 'application/octet-stream';
 }
 
+export function formatMediaImageByteSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
+export function checkMediaImageSize({ glaasName, mediaPath, sizeBytes, logRequest }) {
+  const exceedsDocumentedLimit = sizeBytes > MEDIA_IMAGE_MAX_BYTES;
+  const exceedsUploadLimit = sizeBytes > MEDIA_IMAGE_UPLOAD_MAX_BYTES;
+  const detail = {
+    glaasName,
+    mediaPath,
+    sizeBytes,
+    sizeFormatted: formatMediaImageByteSize(sizeBytes),
+    maxBytes: MEDIA_IMAGE_UPLOAD_MAX_BYTES,
+    maxFormatted: formatMediaImageByteSize(MEDIA_IMAGE_UPLOAD_MAX_BYTES),
+    documentedMaxBytes: MEDIA_IMAGE_MAX_BYTES,
+    documentedMaxFormatted: formatMediaImageByteSize(MEDIA_IMAGE_MAX_BYTES),
+    exceedsUploadLimit,
+    exceedsDocumentedLimit,
+  };
+  logMultimodalDebug(logRequest, 'media-image-size', detail);
+  if (exceedsUploadLimit) {
+    logMultimodalDebug(
+      logRequest,
+      'Image exceeds observed Media Bus upload limit',
+      detail,
+      { level: 'warn' },
+    );
+  } else if (exceedsDocumentedLimit) {
+    logMultimodalDebug(
+      logRequest,
+      'Image exceeds documented Media Bus limit',
+      detail,
+      { level: 'warn' },
+    );
+  }
+  return detail;
+}
+
+function mediaImageSkipWarning({ glaasName, sizeFormatted, maxFormatted }) {
+  return `Skipping oversized image (keeping source URL): ${glaasName} (${sizeFormatted} exceeds ${maxFormatted} upload limit). Compress or resize the source asset.`;
+}
+
+function skippedOversizedMediaUpload({ glaasName, sizeCheck }) {
+  return {
+    skipped: true,
+    reason: 'exceeds_upload_limit',
+    warning: mediaImageSkipWarning({
+      glaasName,
+      sizeFormatted: sizeCheck.sizeFormatted,
+      maxFormatted: sizeCheck.maxFormatted,
+    }),
+    glaasName,
+    ...sizeCheck,
+  };
+}
+
 export async function postImageToDaMedia({
-  org, site, langCode, glaasName, blob, contentType,
+  org, site, langCode, glaasName, blob, contentType, logRequest,
 }) {
   const mediaPath = buildTranslatedMediaPath({ langCode, glaasName });
   const type = blobContentTypeForDaSource({ daSourcePath: mediaPath, blob, contentType });
   const data = blob.type === type ? blob : new Blob([await blob.arrayBuffer()], { type });
+  const sizeCheck = checkMediaImageSize({
+    glaasName,
+    mediaPath,
+    sizeBytes: data.size,
+    logRequest,
+  });
+  if (sizeCheck.exceedsUploadLimit) {
+    return skippedOversizedMediaUpload({ glaasName, sizeCheck });
+  }
   const body = new FormData();
   body.append('data', data, mediaPath.split('/').pop());
   try {
-    const resp = await daFetch(`${DA_ORIGIN}/media/${org}/${site}${mediaPath}`, { method: 'POST', body });
-    if (!resp.ok) return { error: 'Error uploading image to media.', status: resp.status };
+    const resp = await daFetch({ url: `${DA_ADMIN}/media/${org}/${site}${mediaPath}`, opts: { method: 'POST', body } });
+    if (!resp.ok) {
+      if (resp.status === 413) {
+        return skippedOversizedMediaUpload({ glaasName, sizeCheck });
+      }
+      return { error: 'Error uploading image to media.', status: resp.status, glaasName, ...sizeCheck };
+    }
     const json = await resp.json();
     const href = json?.uri ?? json?.url;
     if (!href) return { error: 'Missing media URI in response.', status: resp.status, json };
@@ -590,6 +937,55 @@ export async function postImageToDaMedia({
   } catch {
     return { error: 'Error uploading image to media.' };
   }
+}
+
+async function saveMultimodalImageToMedia({
+  service,
+  token,
+  task,
+  org,
+  site,
+  langCode,
+  image,
+  logRequest,
+}) {
+  const downloaded = await downloadMultimodalAssetBlob(service, token, task, image.glaasName);
+  if (downloaded.error) return downloaded;
+
+  const uploaded = await postImageToDaMedia({
+    org,
+    site,
+    langCode,
+    glaasName: image.glaasName,
+    blob: downloaded.blob,
+    contentType: downloaded.contentType,
+    logRequest,
+  });
+  if (uploaded.skipped) {
+    const detail = {
+      glaasName: image.glaasName,
+      contentDaLiveUrl: image.contentDaLiveUrl,
+      warning: uploaded.warning,
+      sizeFormatted: uploaded.sizeFormatted,
+      maxFormatted: uploaded.maxFormatted,
+    };
+    logMultimodalDebug(
+      logRequest,
+      'Skipping oversized image (keeping source URL)',
+      detail,
+      { level: 'warn' },
+    );
+    return {
+      skipped: true,
+      glaasName: image.glaasName,
+      contentDaLiveUrl: image.contentDaLiveUrl,
+      warning: uploaded.warning,
+    };
+  }
+  if (uploaded.error) return uploaded;
+
+  const sourceKey = contentDaLivePathKey(image.contentDaLiveUrl);
+  return { sourceKey, url: uploaded.url };
 }
 
 export async function prepareMultimodalPageForSave({
@@ -601,27 +997,40 @@ export async function prepareMultimodalPageForSave({
   langCode,
   pageAsset,
   htmlAssetName,
+  logRequest,
+  onWarning,
 }) {
   const pathToNewUrl = new Map();
+  const skippedImages = [];
   const locale = langCode ?? task.code;
 
-  for (const image of pageAsset.images) {
-    const downloaded = await downloadMultimodalAssetBlob(service, token, task, image.glaasName);
-    if (downloaded.error) return downloaded;
-
-    const uploaded = await postImageToDaMedia({
+  const { error: imageError, results: imageEntries } = await runImageQueue({
+    items: pageAsset.images,
+    pushIntervalMs: IMAGE_PUSH_INTERVAL_MS,
+    processItem: (image) => saveMultimodalImageToMedia({
+      service,
+      token,
+      task,
       org,
       site,
       langCode: locale,
-      glaasName: image.glaasName,
-      blob: downloaded.blob,
-      contentType: downloaded.contentType,
-    });
-    if (uploaded.error) return uploaded;
+      image,
+      logRequest,
+    }),
+  });
+  if (imageError) return imageError;
 
-    const sourceKey = contentDaLivePathKey(image.contentDaLiveUrl);
-    if (sourceKey) pathToNewUrl.set(sourceKey, uploaded.url);
-  }
+  imageEntries.forEach((entry) => {
+    if (entry?.skipped) {
+      skippedImages.push(entry);
+      return;
+    }
+    if (entry?.sourceKey) pathToNewUrl.set(entry.sourceKey, entry.url);
+  });
+
+  skippedImages.forEach(({ warning }) => {
+    onWarning?.({ text: warning, type: 'warning' });
+  });
 
   const htmlDownload = await downloadMultimodalAsset(service, token, task, htmlAssetName);
   if (htmlDownload?.error) return { error: htmlDownload.error };
@@ -630,5 +1039,5 @@ export async function prepareMultimodalPageForSave({
     ? rewriteContentDaLiveImageUrls(htmlDownload, pathToNewUrl)
     : htmlDownload;
 
-  return { text };
+  return { text, skippedImages };
 }

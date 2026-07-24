@@ -1,7 +1,7 @@
 /* eslint-disable no-use-before-define */
 import { HLX_ADMIN, AEM_API, DA_ADMIN, ALLOWED_TOKEN } from './utils.js';
 
-const { loadIms, handleSignIn } = await (async () => {
+export const { loadIms, handleSignIn } = await (async () => {
   try {
     const { getNx } = await import(`${window.location.origin}/scripts/utils.js`);
     return await import(`${getNx()}/utils/ims.js`);
@@ -10,6 +10,8 @@ const { loadIms, handleSignIn } = await (async () => {
     return import('../../nx/utils/ims.js');
   }
 })();
+
+export { AEM_API };
 
 // ============================================================================
 // Public API
@@ -42,7 +44,7 @@ const { loadIms, handleSignIn } = await (async () => {
 
 // aem: combined preview + live operations.
 // preview/unPreview/publish/unPublish accept `path` as string or array (2+ -> bulk).
-// preview/publish also accept optional `forceUpdate`/`forceSync` flags.
+// preview/publish also accept an optional `forceUpdate` flag.
 export const aem = {
   getPreview: withArgs(({ org, site, path }) => callPath({
     api: 'preview', org, site, path, method: 'GET',
@@ -52,16 +54,16 @@ export const aem = {
     api: 'live', org, site, path, method: 'GET',
   })),
 
-  preview: withArgs(({ org, site, path, forceUpdate, forceSync }) => callPath({
-    api: 'preview', org, site, path, method: 'POST', forceUpdate, forceSync,
+  preview: withArgs(({ org, site, path, forceUpdate }) => callPath({
+    api: 'preview', org, site, path, method: 'POST', forceUpdate,
   })),
 
   unPreview: withArgs(({ org, site, path }) => callPath({
     api: 'preview', org, site, path, method: 'DELETE', includeDelete: true,
   })),
 
-  publish: withArgs(({ org, site, path, forceUpdate, forceSync }) => callPath({
-    api: 'live', org, site, path, method: 'POST', forceUpdate, forceSync,
+  publish: withArgs(({ org, site, path, forceUpdate }) => callPath({
+    api: 'live', org, site, path, method: 'POST', forceUpdate,
   })),
 
   unPublish: withArgs(({ org, site, path }) => callPath({
@@ -71,9 +73,12 @@ export const aem = {
 
 // config: top-level org/site config.
 export const config = {
-  get: withArgs(async ({ org, site }) => {
+  get: withArgs(async ({ org, site, cachebust }) => {
     const url = await getDaApiPath(CONFIG, org, site);
-    return daFetch({ url });
+    const finalUrl = cachebust
+      ? `${url}${url.includes('?') ? '&' : '?'}nocache=${Date.now()}`
+      : url;
+    return daFetch({ url: finalUrl });
   }),
 
   save: withArgs(async ({ org, site, body }) => {
@@ -188,9 +193,14 @@ export const snapshot = {
 // { org, site, path, ...extras } or a `/org/site/file/path` string.
 // `extras` (second arg) merges with parsed args when arg is a string.
 export const source = {
-  get: withArgs(async ({ org, site, path }) => {
+  get: withArgs(async ({
+    org, site, path, cachebust,
+  }) => {
     const url = await getDaApiPath(SOURCE, org, site, path);
-    return daFetch({ url });
+    const finalUrl = cachebust
+      ? `${url}${url.includes('?') ? '&' : '?'}nocache=${Date.now()}`
+      : url;
+    return daFetch({ url: finalUrl });
   }),
 
   // Returns `{ ok, items, continuationToken, permissions }`. Pagination
@@ -231,7 +241,7 @@ export const source = {
     const hlx6 = await isHlx6(org, site);
     const url = await getDaApiPath(SOURCE, org, site, path);
     const opts = { method: 'POST' };
-    const ext = Object.keys(TYPE_MAP).find((e) => path.endsWith(e));
+    const ext = Object.keys(TYPE_MAP).find((e) => path.toLowerCase().endsWith(e));
     if (hlx6) {
       opts.body = body;
       if (ext) opts.headers = { 'Content-Type': TYPE_MAP[ext] };
@@ -300,6 +310,26 @@ export const source = {
     const url = await getDaApiPath(SOURCE, org, site, `${path}/`);
     return daFetch({ url, opts: { method: 'DELETE' } });
   }),
+
+  copyFolder: withArgs(async ({
+    org, site, path, destination, collision,
+  }) => {
+    const hlx6 = await isHlx6(org, site);
+    if (hlx6) {
+      const folderPath = path.endsWith('/') ? path : `${path}/`;
+      const folderDestination = destination.endsWith('/') ? destination : `${destination}/`;
+      const url = new URL(await getDaApiPath(SOURCE, org, site, folderDestination));
+      url.searchParams.set('source', folderPath);
+      if (collision) url.searchParams.set('collision', collision);
+      return daFetch({ url: url.toString(), opts: { method: 'PUT' } });
+    }
+    const formData = new FormData();
+    formData.append('destination', destination);
+    return daFetch({
+      url: `${DA_ADMIN}/copy/${org}/${site}${path}`,
+      opts: { method: 'POST', body: formData },
+    });
+  }),
 };
 
 // status: single-path only. H6 has no bulk status endpoint.
@@ -337,18 +367,14 @@ export const versions = {
     const url = await getDaApiPath(VERSIONS, org, site, path);
     const opts = { method: 'POST' };
     if (hlx6) {
-      // hlx6 accepts { operation, comment } JSON body.
-      const payload = {};
-      if (operation) payload.operation = operation;
-      if (comment) payload.comment = comment;
-      if (Object.keys(payload).length > 0) {
-        opts.headers = { 'Content-Type': 'application/json' };
-        opts.body = JSON.stringify(payload);
-      }
-    } else if (comment) {
-      // Legacy DA accepts { label } JSON body. Map comment -> label.
-      opts.body = JSON.stringify({ label: comment });
+      // hlx6 takes operation/comment as query params with no request body.
+      const u = new URL(url);
+      if (operation) u.searchParams.set('operation', operation);
+      if (comment) u.searchParams.set('comment', comment);
+      return daFetch({ url: u.toString(), opts });
     }
+    // Legacy DA accepts a { label } JSON body. Map comment -> label.
+    if (comment) opts.body = JSON.stringify({ label: comment });
     return daFetch({ url, opts });
   }),
 };
@@ -473,6 +499,29 @@ export function fromPath(str) {
   return { org, site, path: parts.length ? `/${parts.join('/')}` : '' };
 }
 
+// Site token exchange for authenticated content access.
+// Uses IIFE pattern for memoized token retrieval.
+export const getAemSiteToken = (() => {
+  const tokenCache = {};
+
+  const fetchToken = async (org, site) => {
+    const { accessToken } = await loadIms();
+    const { token } = accessToken;
+
+    const body = JSON.stringify({ org, site, accessToken: token });
+    const opts = { method: 'POST', body, headers: { 'Content-Type': 'application/json' } };
+    const resp = await fetch(`${HLX_ADMIN}/auth/adobe/exchange`, opts);
+    if (!resp.ok) return { error: `Error fetch AEM Site Token ${resp.status}` };
+    return resp.json();
+  };
+
+  return ({ org, site }) => {
+    const path = `/${org}/${site}`;
+    tokenCache[path] ??= fetchToken(org, site);
+    return tokenCache[path];
+  };
+})();
+
 // ============================================================================
 // Internal helpers
 // ============================================================================
@@ -529,7 +578,7 @@ async function getDaApiPath(api, org, site, path = '') {
   return `${DA_ADMIN}/source/${org}/${site}${path}`;
 }
 
-// AEM-only endpoints. New API origin or legacy admin.hlx.page with ref=main.
+// AEM-only endpoints. New API origin or legacy admin.entmseds.page with ref=main.
 async function getAemApiPath(api, org, site, path = '') {
   const hlx6 = await isHlx6(org, site);
 
@@ -586,16 +635,15 @@ function jsonOpts(method, payload) {
 
 // Dispatcher for AEM ops that accept path as string or array.
 // Array of length >= 2 routes to the bulk /* endpoint with { paths, delete? }.
-// `forceUpdate`/`forceSync` are bulk-only (server ignores them on single-path).
+// `forceUpdate` is bulk-only (server ignores it on single-path).
 async function callPath({
-  api, org, site, path, method, includeDelete = false, forceUpdate, forceSync,
+  api, org, site, path, method, includeDelete = false, forceUpdate,
 }) {
   if (Array.isArray(path) && path.length >= 2) {
     const url = await getAemApiPath(api, org, site, '/*');
     const payload = { paths: path };
     if (includeDelete) payload.delete = true;
     if (forceUpdate) payload.forceUpdate = true;
-    if (forceSync) payload.forceSync = true;
     return daFetch({ url, opts: jsonOpts('POST', payload) });
   }
   const single = Array.isArray(path) ? path[0] : path;
@@ -603,36 +651,39 @@ async function callPath({
   return daFetch({ url, opts: { method } });
 }
 
+function toHlx6DaItem(parentPath, item) {
+  // Normalize folder
+  const isFolder = item.name.endsWith('/');
+  let name = isFolder ? item.name.slice(0, -1) : item.name;
+
+  // Set the path before extension removal
+  const path = `${parentPath}/${name}`;
+
+  // Remove extension for display
+  const nameSplit = name.split('.');
+  name = nameSplit.length > 1 ? nameSplit[0] : name;
+
+  // Scaffold out the basics
+  const daItem = { name, path, contentType: item['content-type'] };
+
+  const ext = nameSplit.length > 1 && nameSplit.pop();
+  if (ext) daItem.ext = ext;
+
+  const lastModified = item['last-modified'];
+  if (lastModified) {
+    const unixTime = Math.floor(new Date(lastModified).getTime());
+    daItem.lastModified = unixTime;
+  }
+
+  return daItem;
+}
+
 function hlx6ToDaList(parentPath, items) {
   return items.map((item) => {
-    const contentType = item['content-type'];
-
-    // Only HLX6 has a content type
-    if (!contentType) return item;
-
-    // Normalize folder
-    const isFolder = item.name.endsWith('/');
-    let name = isFolder ? item.name.slice(0, -1) : item.name;
-
-    // Set the path before extension removal
-    const path = `${parentPath}/${name}`;
-
-    // Remove extension for display
-    const nameSplit = name.split('.');
-    name = nameSplit.length > 1 ? nameSplit[0] : name;
-
-    // Scaffold out the basics
-    const daItem = { name, path, contentType };
-
-    const ext = nameSplit.length > 1 && nameSplit.pop();
-    if (ext) daItem.ext = ext;
-
-    const lastModified = item['last-modified'];
-    if (lastModified) {
-      const unixTime = Math.floor(new Date(lastModified).getTime());
-      daItem.lastModified = unixTime;
-    }
-
-    return daItem;
-  });
+    // Legacy DA items (no content-type) are returned as-is; callers handle their edge cases.
+    if (!item['content-type']) return item;
+    // HLX6 items: filter out hidden or nameless entries, then normalize.
+    if (!item.name || item.name.startsWith('.')) return null;
+    return toHlx6DaItem(parentPath, item);
+  }).filter(Boolean);
 }

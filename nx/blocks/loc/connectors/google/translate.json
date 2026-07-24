@@ -41,7 +41,7 @@
             },
             {
                 "key": "translation.service.prod.origin",
-                "value": "https://translate.da.live/google",
+                "value": "https://translate.entmseds-da.live/google",
                 "description": ""
             }
         ],

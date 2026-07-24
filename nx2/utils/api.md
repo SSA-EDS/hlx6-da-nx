@@ -1,10 +1,10 @@
 # `nx2/utils/api.js` — DA / AEM Admin API
 
-A unified client for talking to **DA admin** (`admin.da.live`) and the **AEM admin API** in either its legacy form (`admin.hlx.page`, "helix5") or its new form (`api.aem.live`, "helix6"). Every method auto-routes by the per-site **hlx6** upgrade flag — once a site has been upgraded, calls flow to the new origin; otherwise they fall back to the legacy origin.
+A unified client for talking to **DA admin** (`admin.entmseds-da.live`) and the **AEM admin API** in either its legacy form (`admin.entmseds.page`, "helix5") or its new form (`api.entmseds.live`, "helix6"). Every method auto-routes by the per-site **hlx6** upgrade flag — once a site has been upgraded, calls flow to the new origin; otherwise they fall back to the legacy origin.
 
 The module ships its low-level primitive (`daFetch`), an upgrade detector (`isHlx6`), helpers (`fromPath`, `signout`, `asJson`, `asText`), and **eight namespaced surfaces**: `source`, `versions`, `config`, `org`, `status`, `aem`, `snapshot`, `jobs`. Type definitions live in `[api.d.ts](./api.d.ts)` — VSCode picks them up automatically and surfaces overloads, field-level docs, and inline shapes.
 
-> **Routing model.** Some endpoints are owned by DA itself (`source`, `list`, `config`, `versions`) and DA proxies them to AEM when the site is upgraded. Others are AEM-only (`status`, `preview`, `live`, `snapshots`, `jobs`) and live on either `admin.hlx.page` (legacy) or `api.aem.live` (hlx6). The module hides this distinction; callers always pass `{ org, site, path }` and get a `Response` back.
+> **Routing model.** Some endpoints are owned by DA itself (`source`, `list`, `config`, `versions`) and DA proxies them to AEM when the site is upgraded. Others are AEM-only (`status`, `preview`, `live`, `snapshots`, `jobs`) and live on either `admin.entmseds.page` (legacy) or `api.entmseds.live` (hlx6). The module hides this distinction; callers always pass `{ org, site, path }` and get a `Response` back.
 
 ---
 
@@ -123,6 +123,7 @@ Document CRUD on `source` paths. Bridges DA's `/source` and AEM's `/sites/{site}
 | `move`         | `({ org, site, path, destination, collision? })` or `(fullPath, { destination, collision? })` | Same shape as `copy`. Raw `Response`. Adds `?move=true` (hlx6) or POSTs to `/move/{org}/{site}{path}` (DA).                                                                                  |
 | `createFolder` | `({ org, site, path })` or `(fullPath)`                                                       | POST on `${path}/` (trailing slash).                                                                                                                                                           |
 | `deleteFolder` | `({ org, site, path })` or `(fullPath)`                                                       | DELETE on `${path}/`.                                                                                                                                                                          |
+| `copyFolder`   | `({ org, site, path, destination, collision? })` or `(fullPath, { destination, collision? })` | Recursive folder copy. Same shape as `copy`. **hlx6**: `path`/`destination` are normalized to a trailing slash first, then PUT to dest URL with `?source=…/&collision=…` query. **DA**: POST `/copy/{org}/{site}{path}` with `multipart/form-data` field `destination` — no trailing-slash normalization (legacy DA doesn't need it). |
 
 
 ### URL shapes
@@ -134,6 +135,7 @@ Document CRUD on `source` paths. Bridges DA's `/source` and AEM's `/sites/{site}
 | list (org-only)                  | n/a                                              | `${DA_ADMIN}/list/{org}`                                                                 |
 | list (with site, legacy)         | n/a                                              | `${DA_ADMIN}/list/{org}/{site}{path}`                                                    |
 | copy / move                      | PUT to dest URL with `?source=&collision=&move=` | POST to `${DA_ADMIN}/copy/{org}/{site}{path}` (or `/move`) with `destination` form field |
+| copyFolder                       | PUT to dest URL (trailing slash normalized) with `?source=&collision=` | POST to `${DA_ADMIN}/copy/{org}/{site}{path}` with `destination` form field (no trailing-slash normalization) |
 
 
 ### Examples
@@ -165,6 +167,16 @@ const copyResp = await source.copy({
   site: 'aem-boilerplate',
   path: '/old.html',          // source
   destination: '/new.html',   // dest
+  collision: 'overwrite',
+});
+
+// Copy a folder recursively — path/destination don't need a trailing slash.
+// On hlx6 they're normalized to one before dispatch; legacy DA uses them as-is.
+const copyFolderResp = await source.copyFolder({
+  org: 'adobe',
+  site: 'aem-boilerplate',
+  path: '/old-folder',        // source folder
+  destination: '/new-folder', // dest folder
   collision: 'overwrite',
 });
 ```
@@ -282,7 +294,7 @@ const { preview, live, edit } = info;
 
 Combined preview + live (publish) operations. The `path` argument can be a **string** (single op) or an **array of length ≥ 2** (bulk op). Single string or one-item array hits the single-path endpoint.
 
-`forceUpdate` and `forceSync` are **bulk-only** — server ignores them on single-path calls.
+`forceUpdate` is **bulk-only** — server ignores it on single-path calls.
 
 **Returns:** all methods return a raw `Response`. Parse with `await resp.json()` or the `asJson` helper.
 
@@ -291,9 +303,9 @@ Combined preview + live (publish) operations. The `path` argument can be a **str
 | ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `getPreview` | `({ org, site, path })` or `(fullPath)`                  | GET preview status (single only).                                                                                |
 | `getPublish` | `({ org, site, path })` or `(fullPath)`                  | GET publish status (single only).                                                                                |
-| `preview`    | `({ org, site, path, forceUpdate?, forceSync? })`        | string → POST `/preview/{path}`. Array of 2+ → POST `/preview/.../*` with `{ paths, forceUpdate?, forceSync? }`. |
+| `preview`    | `({ org, site, path, forceUpdate? })`                    | string → POST `/preview/{path}`. Array of 2+ → POST `/preview/.../*` with `{ paths, forceUpdate? }`.             |
 | `unPreview`  | `({ org, site, path })`                                  | string → DELETE `/preview/{path}`. Array of 2+ → POST `/preview/.../*` with `{ paths, delete: true }`.           |
-| `publish`    | `({ org, site, path, forceUpdate?, forceSync? })`        | string → POST `/live/{path}`. Array of 2+ → POST `/live/.../*` with `{ paths, forceUpdate?, forceSync? }`.       |
+| `publish`    | `({ org, site, path, forceUpdate? })`                    | string → POST `/live/{path}`. Array of 2+ → POST `/live/.../*` with `{ paths, forceUpdate? }`.                   |
 | `unPublish`  | `({ org, site, path })`                                  | string → DELETE `/live/{path}`. Array of 2+ → POST `/live/.../*` with `{ paths, delete: true }`.                 |
 
 
@@ -446,7 +458,7 @@ The low-level fetch primitive. Most callers shouldn't use it directly — namesp
 
 ```js
 const resp = await daFetch({
-  url: 'https://admin.da.live/some-endpoint',
+  url: 'https://admin.entmseds-da.live/some-endpoint',
   opts: { method: 'POST', body: formData },
 });
 ```
@@ -507,7 +519,7 @@ These are not exported, but understanding them helps when reading the source.
 - `**getAemApiPath(api, org, site, path)**` — URL builder for AEM-only endpoints (`status`, `preview`, `live`, `snapshots`, `jobs`). Branches on `isHlx6` to choose `HLX_ADMIN` (with hardcoded `ref=main`) or `AEM_API`.
 - `**withArgs(fn)**` — HOF that resolves the first arg (object or path string) and forwards a normalized `{ org, site, path, ...extras }` object to `fn`. Handles the bad-arg `console.error` for missing org. Also prepends a leading slash to `path` if missing.
 - `**normalizePath(path)**` — Standalone leading-slash normalizer. Accepts a string or string-array (and passes non-strings through). Used by `snapshot.addPath` / `snapshot.removePath`, which don't go through `withArgs`.
-- `**callPath({ api, org, site, path, method, … })**` — Dispatcher used by `aem.*` methods. Handles the string-vs-array branching for bulk preview/publish operations and folds `forceUpdate`/`forceSync` into the bulk JSON body. Returns a `Response`.
+- `**callPath({ api, org, site, path, method, … })**` — Dispatcher used by `aem.*` methods. Handles the string-vs-array branching for bulk preview/publish operations and folds `forceUpdate` into the bulk JSON body. Returns a `Response`.
 - `**jsonOpts(method, payload)**` — small helper that builds `{ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }`.
 
 ---
@@ -519,9 +531,9 @@ Imported from `./utils.js`:
 
 | Constant        | Value                               | Used for              |
 | --------------- | ----------------------------------- | --------------------- |
-| `DA_ADMIN`      | `https://admin.da.live` (env-aware) | DA admin origin       |
-| `HLX_ADMIN`     | `https://admin.hlx.page`            | Legacy AEM admin      |
-| `AEM_API`       | `https://api.aem.live`              | New AEM admin (hlx6)  |
+| `DA_ADMIN`      | `https://admin.entmseds-da.live` (env-aware) | DA admin origin       |
+| `HLX_ADMIN`     | `https://admin.entmseds.page`            | Legacy AEM admin      |
+| `AEM_API`       | `https://api.entmseds.live`              | New AEM admin (hlx6)  |
 | `ALLOWED_TOKEN` | array of origins                    | Auth header allowlist |
 
 
@@ -544,7 +556,6 @@ Defined locally:
 These are tracked but not yet resolved. They don't block typical usage; flagged here for completeness.
 
 - `**config.save` wire shape**: currently sends `multipart/form-data` with field `config`. The H5/H6 admin endpoints actually expect raw JSON body. DA's exact requirement is undocumented; existing da-live tests assert PUT instead of POST. Needs verification against running servers.
-- `**forceSync` field name**: the H6 server source reads `forceAsync` (with inverse meaning), not `forceSync`. Currently sending `forceSync: true` is silently ignored by the server. This affects the `aem.preview`/`aem.publish` bulk paths and `start/index.js` in da-live.
 
 ---
 
@@ -559,7 +570,7 @@ window.fetch = async (url, opts = {}) => {
 };
 
 await source.get({ org: 'foo', site: 'bar', path: '/x.html' });
-expect(lastCall().url).to.equal('https://admin.da.live/source/foo/bar/x.html');
+expect(lastCall().url).to.equal('https://admin.entmseds-da.live/source/foo/bar/x.html');
 ```
 
 The IMS dependency is mocked via the importmap in `web-test-runner.config.mjs` (`/nx2/utils/ims.js` → `/nx2/test/mocks/ims.js`).

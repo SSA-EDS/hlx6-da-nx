@@ -37,7 +37,7 @@ describe('Glaas DNT', () => {
       <p>Some text with a :happy: icon</p>
     </div>
     <div>
-      <img src="https://main--da-bacom--adobecom.aem.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg?optimize=medium" alt="https://a.com | Text here | :play:" loading="lazy" />
+      <img src="https://main--da-bacom--adobecom.entmseds.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg?optimize=medium" alt="https://a.com | Text here | :play:" loading="lazy" />
     </div>
   </main>
 </body>`;
@@ -51,7 +51,7 @@ describe('Glaas DNT', () => {
       <p>Some text with a <span class="icon icon-happy"></span> icon</p>
     </div>
     <div>
-      <img src="https://main--da-bacom--adobecom.aem.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg?optimize=medium" alt="Text here" loading="lazy" dnt-alt-content="https://a.com | *alt-placeholder* | :play:">
+      <img src="https://main--da-bacom--adobecom.entmseds.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg?optimize=medium" alt="Text here" loading="lazy" dnt-alt-content="https://a.com | *alt-placeholder* | :play:">
     </div>
   </main>
 </body></html>`,
@@ -66,7 +66,7 @@ describe('Glaas DNT', () => {
       <p>Some text with a :happy: icon</p>
     </div>
     <div>
-      <img src="https://main--da-bacom--adobecom.aem.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg?optimize=medium" alt="https://a.com | Text here | :play:" loading="lazy">
+      <img src="https://main--da-bacom--adobecom.entmseds.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg?optimize=medium" alt="https://a.com | Text here | :play:" loading="lazy">
     </div>
   </main>
 </body></html>`,
@@ -93,17 +93,17 @@ describe('Glaas DNT', () => {
       <p>Some text with a :happy: icon</p>
     </div>
     <div>
-      <img src="https://main--milo--adobecom.aem.page/media_14397d257748618c661379e599afb2fdd682c2335.png?width=750&amp;format=png&amp;optimize=medium" alt="https://a.com | Text here | :play:" loading="lazy" />
+      <img src="https://main--milo--adobecom.entmseds.page/media_14397d257748618c661379e599afb2fdd682c2335.png?width=750&amp;format=png&amp;optimize=medium" alt="https://a.com | Text here | :play:" loading="lazy" />
     </div>
         <div>
-      <img src="https://main--da-bacom--adobecom.aem.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg" alt="https://a.com | Text here | :play:" loading="lazy" />
+      <img src="https://main--da-bacom--adobecom.entmseds.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg" alt="https://a.com | Text here | :play:" loading="lazy" />
     </div>
     <div>
-      <img src="https://main--da-bacom--adobecom.aem.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg#test" />
+      <img src="https://main--da-bacom--adobecom.entmseds.live/media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg#test" />
     </div>
     <div>
       <picture>
-        <source srcset="https://content.da.live/adobecom/da-cc/drafts/test/.imagetestfeb26/media_1866efd6c49d4eb614bae84d2d5d546a97de25654.png" />
+        <source srcset="https://content.entmseds-da.live/adobecom/da-cc/drafts/test/.imagetestfeb26/media_1866efd6c49d4eb614bae84d2d5d546a97de25654.png" />
       </picture>
     </div>
   </main>
@@ -118,7 +118,7 @@ describe('Glaas DNT', () => {
       <p>Some text with a <span class="icon icon-happy"></span> icon</p>
     </div>
     <div>
-      <img src="https://main--milo--adobecom.aem.page/media_14397d257748618c661379e599afb2fdd682c2335.png?width=750&amp;format=png&amp;optimize=medium" alt="Text here" loading="lazy" dnt-alt-content="https://a.com | *alt-placeholder* | :play:">
+      <img src="https://main--milo--adobecom.entmseds.page/media_14397d257748618c661379e599afb2fdd682c2335.png?width=750&amp;format=png&amp;optimize=medium" alt="Text here" loading="lazy" dnt-alt-content="https://a.com | *alt-placeholder* | :play:">
     </div>
         <div>
       <img src="./media_14a4b58fd73d82e553ccb65d5f53c3f5ff552330d.jpeg" alt="Text here" loading="lazy" dnt-alt-content="https://a.com | *alt-placeholder* | :play:">
@@ -128,7 +128,7 @@ describe('Glaas DNT', () => {
     </div>
     <div>
       <picture>
-        <source srcset="https://content.da.live/adobecom/da-cc/drafts/test/.imagetestfeb26/media_1866efd6c49d4eb614bae84d2d5d546a97de25654.png">
+        <source srcset="https://content.entmseds-da.live/adobecom/da-cc/drafts/test/.imagetestfeb26/media_1866efd6c49d4eb614bae84d2d5d546a97de25654.png">
       </picture>
     </div>
   </main>
