@@ -7,7 +7,7 @@ import '../../public/sl/components.js';
 import '../shared/path/path.js';
 
 const EL_NAME = 'nx-scheduler';
-const SCHEDULER_BASE = 'https://helix-snapshot-scheduler-prod.adobeaem.workers.dev';
+const SCHEDULER_BASE = 'https://helix-snapshot-scheduler-ams-eds-ca.adobe-managed-services-enterprise.workers.dev';
 
 const styles = await getStyle(import.meta.url);
 

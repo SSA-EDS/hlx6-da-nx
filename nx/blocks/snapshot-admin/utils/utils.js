@@ -4,7 +4,7 @@ import { loadIms } from '../../../../nx2/utils/ims.js';
 import { mergeCopy, overwriteCopy } from '../../loc/project/index.js';
 import { Queue } from '../../../../nx2/public/utils/tree.js';
 
-const SNAPSHOT_SCHEDULER_URL = 'https://helix-snapshot-scheduler-prod.adobeaem.workers.dev';
+const SNAPSHOT_SCHEDULER_URL = 'https://helix-snapshot-scheduler-ams-eds-ca.adobe-managed-services-enterprise.workers.dev';
 
 let org;
 let site;
