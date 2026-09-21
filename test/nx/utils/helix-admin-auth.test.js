@@ -322,5 +322,33 @@ describe('helix-admin-auth', () => {
 
       expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
     });
+
+    it('closes the popup on a correctly-originated message that carries no siteToken', async () => {
+      // A real window, same reason as the "stores the token" test above: event.source must
+      // be the actual popup for the message to be accepted at all.
+      const popup = window.open('', '_blank');
+      window.open = sinon.stub().returns(popup);
+      window.fetch = sinon.stub().resolves({
+        ok: true,
+        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      });
+      const closeSpy = sinon.spy(popup, 'close');
+
+      try {
+        handleSignIn();
+        await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+        window.dispatchEvent(new MessageEvent('message', {
+          origin: new URL(HLX_ADMIN).origin,
+          source: popup,
+          data: { error: 'access_denied' },
+        }));
+        await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+        expect(closeSpy.calledOnce).to.equal(true);
+      } finally {
+        if (!popup.closed) popup.close();
+      }
+    });
   });
 });

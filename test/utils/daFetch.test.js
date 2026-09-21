@@ -1,5 +1,88 @@
 import { expect } from '@esm-bundle/chai';
+import sinon from 'sinon';
+import { HLX_ADMIN } from '../../nx/utils/utils.js';
 import { replaceHtml } from '../../nx/utils/daFetch.js';
+
+const STORAGE_KEY = 'da-helix-admin-auth';
+
+function b64url(obj) {
+  return btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function makeSiteToken(exp) {
+  return `hlxtst_header.${b64url({ exp })}.sig`;
+}
+
+function stubLoginDiscovery(fetchStub) {
+  fetchStub.withArgs(`${HLX_ADMIN}/login`).resolves({
+    ok: true,
+    json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+  });
+}
+
+describe('daFetch / initIms — alternate provider selection', () => {
+  let origFetch;
+  let origOpen;
+
+  beforeEach(() => {
+    origFetch = window.fetch;
+    origOpen = window.open;
+    localStorage.removeItem('nx-ims');
+    localStorage.removeItem(STORAGE_KEY);
+  });
+
+  afterEach(() => {
+    window.fetch = origFetch;
+    window.open = origOpen;
+    localStorage.removeItem('nx-ims');
+    localStorage.removeItem(STORAGE_KEY);
+    sinon.restore();
+  });
+
+  it('attaches the alternate-provider token as the Authorization header', async () => {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const token = makeSiteToken(exp);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ token, exp }));
+    localStorage.setItem('nx-ims', 'true');
+
+    const fetchStub = sinon.stub();
+    stubLoginDiscovery(fetchStub);
+    fetchStub.resolves({
+      ok: true, status: 200, headers: new Headers(), text: async () => '',
+    });
+    window.fetch = fetchStub;
+
+    const fresh = await import(`../../nx/utils/daFetch.js?fresh=${Math.random()}`);
+    await fresh.daFetch('https://example.com/test');
+
+    const [, opts] = fetchStub.args.find(([url]) => url === 'https://example.com/test');
+    expect(opts.headers.Authorization).to.equal(`Bearer ${token}`);
+  });
+
+  it('on a 401, clears the alternate-provider session rather than opening a popup with no user gesture behind it', async () => {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: makeSiteToken(exp), exp }));
+    localStorage.setItem('nx-ims', 'true');
+
+    const fetchStub = sinon.stub();
+    stubLoginDiscovery(fetchStub);
+    fetchStub.resolves({
+      ok: false, status: 401, headers: new Headers(), text: async () => '',
+    });
+    window.fetch = fetchStub;
+    const openStub = sinon.stub();
+    window.open = openStub;
+
+    const fresh = await import(`../../nx/utils/daFetch.js?fresh=${Math.random()}`);
+    await fresh.daFetch('https://example.com/test');
+
+    // handleSignIn() opens a popup — calling it here, with no click behind this reactive
+    // fetch-response continuation, would just get silently blocked. The correct behavior is
+    // clearing the now-invalid session instead, matching the fix in nx/utils/daFetch.js.
+    expect(openStub.called).to.equal(false);
+    expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+  });
+});
 
 describe('replaceHtml', () => {
   describe('structure', () => {

@@ -57,9 +57,17 @@ function readStoredToken() {
   try {
     stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
   } catch {
+    localStorage.removeItem('nx-ims');
     return null;
   }
-  if (!stored?.token || !stored?.exp) return null;
+  if (!stored?.token || !stored?.exp) {
+    // Self-heals nx-ims regardless of prior state, matching ims.js's own loadIms(), rather
+    // than only clearing it on the expiry transition below — this function only ever runs
+    // when the alternate provider is this deployment's active one (isAvailable() already
+    // gated on that upstream), so there is no other provider's nx-ims session to clobber.
+    localStorage.removeItem('nx-ims');
+    return null;
+  }
   if (stored.exp * 1000 <= Date.now()) {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem('nx-ims');
@@ -149,6 +157,10 @@ export function handleSignIn() {
       if (event.data?.siteToken) {
         storeToken(event.data.siteToken);
         reload();
+      } else {
+        // A correctly-originated message with no token (e.g. an explicit error payload)
+        // still needs the popup closed — finish() only stops watching it, it doesn't close it.
+        popup.close();
       }
     }
     window.addEventListener('message', onMessage);

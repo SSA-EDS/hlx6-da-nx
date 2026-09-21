@@ -29,7 +29,13 @@ function renderSignInPrompt(onSignIn) {
     import('./ims.js').catch(() => null),
   ]);
   const authModule = useAlt ? altAuth : imsModule;
-  if (!authModule) return; // ims.js failed to load and it's the one this page needs
+  if (!authModule) {
+    // ims.js failed to load and it's the one this page needs — the page stays hidden with
+    // no other recourse, so at least leave a diagnostic trail rather than fail in total silence.
+    // eslint-disable-next-line no-console
+    console.error('signin: ims.js failed to load; page will stay hidden.');
+    return;
+  }
   const { loadIms, handleSignIn } = authModule;
 
   const imsDetails = await loadIms();
