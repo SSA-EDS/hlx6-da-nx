@@ -4,8 +4,18 @@
 // via its existing /login endpoint. Never hardcodes a provider name, so this stays correct
 // if a deployment's primary idp changes.
 //
-// Same exported shape as ims.js (loadIms, handleSignIn, handleSignOut) so a consumer swaps
-// providers by changing which file it imports from — nothing else.
+// Exports the same function names as ims.js (loadIms, handleSignIn, handleSignOut) plus
+// isAvailable(), so the small set of top-level bootstrap choke points that gate sign-in
+// (nx/utils/signin.js, da-live's initIms()) can pick a provider without hardcoding one.
+//
+// loadIms()'s resolved value is intentionally NOT ims.js's shape, though: the transient
+// site token this is built on (see helix-admin-ams's getTransientSiteTokenInfo) carries only
+// `sub` (email) and `exp` — no org list, no adobe.io profile. Consumers that read ims.js's
+// richer fields (getOrgs(), getIo(), profile data — see profile.js, chat-controller.js, etc.)
+// still import ims.js directly and are unaffected by this file; wiring them up here is out
+// of scope for now, since it would mean fabricating data the backend doesn't have. Don't add
+// stub getOrgs()/getIo() methods that return placeholder data — leaving them absent means a
+// caller fails loudly instead of rendering fake-looking org/profile info.
 //
 // Always popup, never a top-level redirect: DA is a static site with no server-side endpoint
 // to receive the POST helix-admin's redirect flavor expects, in either iframe or top-level
@@ -74,6 +84,18 @@ async function discoverLoginUrl() {
   );
   return entry?.[1] || null;
 }
+
+// Called from top-level bootstrap choke points on every page load (unlike discoverLoginUrl's
+// other caller, handleSignIn, which only runs on an actual sign-in click) — so unlike
+// discoverLoginUrl, this must never reject. A deployment with no alternate idp configured
+// (the common case today) has to fall back to ims.js cleanly, not break on a network hiccup.
+export const isAvailable = (() => {
+  let available;
+  return () => {
+    available ??= discoverLoginUrl().then((url) => !!url).catch(() => false);
+    return available;
+  };
+})();
 
 export function handleSignIn() {
   // Opened synchronously, in the same task as the caller's click — popup blockers reject

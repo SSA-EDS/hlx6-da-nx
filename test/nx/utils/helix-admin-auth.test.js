@@ -1,9 +1,9 @@
 import { expect } from '@esm-bundle/chai';
 import sinon from 'sinon';
-import { HLX_ADMIN } from '../../../nx2/utils/utils.js';
+import { HLX_ADMIN } from '../../../nx/utils/utils.js';
 import {
-  handleSignIn, handleSignOut, loadIms, testHooks,
-} from '../../../nx2/utils/helix-admin-auth.js';
+  handleSignIn, handleSignOut, loadIms, testHooks, isAvailable,
+} from '../../../nx/utils/helix-admin-auth.js';
 
 const STORAGE_KEY = 'da-helix-admin-auth';
 
@@ -47,7 +47,7 @@ describe('helix-admin-auth', () => {
       // (cache-busted) so this test observes its own localStorage state, not a stale result.
       const futureExp = Math.floor(Date.now() / 1000) + 3600;
       storeRawToken('hlxtst_abc.def.ghi', futureExp);
-      const fresh = await import(`../../../nx2/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       const result = await fresh.loadIms();
       expect(result).to.deep.equal({ accessToken: { token: 'hlxtst_abc.def.ghi' } });
     });
@@ -55,7 +55,7 @@ describe('helix-admin-auth', () => {
     it('treats an expired stored token as anonymous and clears it', async () => {
       const pastExp = Math.floor(Date.now() / 1000) - 60;
       storeRawToken('hlxtst_abc.def.ghi', pastExp);
-      const fresh = await import(`../../../nx2/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       const result = await fresh.loadIms();
       expect(result).to.deep.equal({ anonymous: true });
       expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
@@ -66,6 +66,44 @@ describe('helix-admin-auth', () => {
       storeRawToken('hlxtst_abc.def.ghi', Math.floor(Date.now() / 1000) + 3600);
       const second = await loadIms();
       expect(second).to.deep.equal(first);
+    });
+  });
+
+  describe('isAvailable', () => {
+    it('resolves true when a login link is discovered', async () => {
+      // First touch of this file's isAvailable singleton — safe to use the shared import
+      // directly, matching the loadIms block's own first test above.
+      window.fetch = sinon.stub().resolves({
+        ok: true,
+        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      });
+      expect(await isAvailable()).to.equal(true);
+    });
+
+    it('resolves false when no idp is configured', async () => {
+      window.fetch = sinon.stub().resolves({ ok: false });
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      expect(await fresh.isAvailable()).to.equal(false);
+    });
+
+    it('resolves false rather than rejecting when the discovery fetch itself fails', async () => {
+      // Called from top-level page bootstrap on every load, unlike handleSignIn's use of the
+      // same discovery call — a network blip here must fall back to ims.js, not break the page.
+      window.fetch = sinon.stub().rejects(new Error('network down'));
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      expect(await fresh.isAvailable()).to.equal(false);
+    });
+
+    it('memoizes — a second call does not re-fetch', async () => {
+      const fetchStub = sinon.stub().resolves({
+        ok: true,
+        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      });
+      window.fetch = fetchStub;
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      await fresh.isAvailable();
+      await fresh.isAvailable();
+      expect(fetchStub.callCount).to.equal(1);
     });
   });
 
