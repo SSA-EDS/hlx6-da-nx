@@ -184,8 +184,10 @@ describe('helix-admin-auth', () => {
       window.fetch = sinon.stub().resolves({
         ok: true,
         json: async () => ({
-          'login_access-manager_sa': `${HLX_ADMIN}/auth/access-manager?select_account=true`,
-          links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` },
+          links: {
+            'login_access-manager_sa': `${HLX_ADMIN}/auth/access-manager?select_account=true`,
+            'login_access-manager': `${HLX_ADMIN}/auth/access-manager`,
+          },
         }),
       });
 
@@ -205,6 +207,33 @@ describe('helix-admin-auth', () => {
       await new Promise((resolve) => { setTimeout(resolve, 0); });
 
       expect(popup.close.calledOnce).to.equal(true);
+    });
+
+    it('closes the popup if the discovery fetch itself throws', async () => {
+      const popup = makePopupStub();
+      window.open = sinon.stub().returns(popup);
+      window.fetch = sinon.stub().rejects(new Error('network down'));
+
+      handleSignIn();
+      await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+      expect(popup.close.calledOnce).to.equal(true);
+    });
+
+    it('closes the popup rather than navigating it to a non-https login URL', async () => {
+      const popup = makePopupStub();
+      window.open = sinon.stub().returns(popup);
+      window.fetch = sinon.stub().resolves({
+        ok: true,
+        // eslint-disable-next-line no-script-url -- asserting this exact string is rejected
+        json: async () => ({ links: { 'login_access-manager': 'javascript:alert(1)' } }),
+      });
+
+      handleSignIn();
+      await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+      expect(popup.close.calledOnce).to.equal(true);
+      expect(popup.location).to.equal('');
     });
 
     it('stores the token and reloads on a valid postMessage from the popup', async () => {

@@ -104,13 +104,24 @@ export function handleSignIn() {
   if (!popup) return;
 
   (async () => {
-    const loginUrl = await discoverLoginUrl();
-    if (!loginUrl) {
+    let url;
+    try {
+      const loginUrl = await discoverLoginUrl();
+      url = loginUrl && new URL(loginUrl);
+    } catch {
+      url = null;
+    }
+    // /login only ever returns a same-deployment helix-admin URL (see discoverLoginUrl) —
+    // the protocol check guards against a misconfigured or compromised backend response
+    // navigating the popup somewhere unexpected (e.g. a javascript: URI, which would run in
+    // this same-origin popup). A rejected discovery fetch (network blip, bad JSON, etc.) hits
+    // the same close-and-give-up path as "no idp configured" — leaving the popup open and
+    // blank forever on a transient error would be worse than closing it.
+    if (!url || url.protocol !== 'https:') {
       popup.close();
       return;
     }
 
-    const url = new URL(loginUrl);
     url.searchParams.set('client_id', 'da-live');
     url.searchParams.set('redirect_uri', REDIRECT_URI);
     url.searchParams.set('response_mode', 'popup');
