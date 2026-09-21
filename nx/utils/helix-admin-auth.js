@@ -47,6 +47,11 @@ function decodeJwtPayload(jwt) {
   }
 }
 
+// 'nx-ims' is ims.js's own flag for "a session might be active," read by consumers (e.g.
+// da-live's getAuthToken()) as a fast, synchronous pre-check before ever calling loadIms() —
+// not actually IMS-specific despite the name, just the only provider that existed when it was
+// named. Set/cleared here too so those consumers work the same regardless of which provider
+// is active; skipping this left the alternate provider's sessions invisible to them.
 function readStoredToken() {
   let stored;
   try {
@@ -57,6 +62,7 @@ function readStoredToken() {
   if (!stored?.token || !stored?.exp) return null;
   if (stored.exp * 1000 <= Date.now()) {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('nx-ims');
     return null;
   }
   return stored;
@@ -66,10 +72,12 @@ function storeToken(siteToken) {
   const payload = decodeJwtPayload(siteToken.replace(/^hlxtst_/, ''));
   if (!payload?.exp) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: siteToken, exp: payload.exp }));
+  localStorage.setItem('nx-ims', true);
 }
 
 export function handleSignOut() {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('nx-ims');
 }
 
 // helix-admin's /login already applies isIdpAvailable()/HLX_ADMIN_AUTH_PROVIDER (see

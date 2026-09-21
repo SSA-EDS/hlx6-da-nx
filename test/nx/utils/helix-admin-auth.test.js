@@ -25,6 +25,7 @@ describe('helix-admin-auth', () => {
 
   beforeEach(() => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('nx-ims');
     origOpen = window.open;
     origFetch = window.fetch;
   });
@@ -55,10 +56,12 @@ describe('helix-admin-auth', () => {
     it('treats an expired stored token as anonymous and clears it', async () => {
       const pastExp = Math.floor(Date.now() / 1000) - 60;
       storeRawToken('hlxtst_abc.def.ghi', pastExp);
+      localStorage.setItem('nx-ims', true);
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       const result = await fresh.loadIms();
       expect(result).to.deep.equal({ anonymous: true });
       expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+      expect(localStorage.getItem('nx-ims')).to.equal(null);
     });
 
     it('memoizes — a second call does not re-read storage', async () => {
@@ -108,10 +111,12 @@ describe('helix-admin-auth', () => {
   });
 
   describe('handleSignOut', () => {
-    it('clears the stored token', () => {
+    it('clears the stored token and the shared nx-ims flag', () => {
       storeRawToken('hlxtst_abc.def.ghi', Math.floor(Date.now() / 1000) + 3600);
+      localStorage.setItem('nx-ims', true);
       handleSignOut();
       expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+      expect(localStorage.getItem('nx-ims')).to.equal(null);
     });
   });
 
@@ -264,6 +269,10 @@ describe('helix-admin-auth', () => {
         expect(reloadStub.calledOnce).to.equal(true);
         const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
         expect(stored.token).to.equal(token);
+        // Consumers like da-live's getAuthToken() gate on this shared flag before ever
+        // calling loadIms() — without it, a signed-in alt-provider session was invisible to
+        // them. ims.js sets the same key on its own sign-in.
+        expect(localStorage.getItem('nx-ims')).to.equal('true');
       } finally {
         popup.close();
       }

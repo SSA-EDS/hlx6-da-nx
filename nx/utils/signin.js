@@ -21,12 +21,16 @@ function renderSignInPrompt(onSignIn) {
 
   // Run discovery and the (lazy, side-effecting) ims.js import in parallel so a deployment
   // with no alternate idp configured — the common case — doesn't pay a sequential round trip
-  // before IMS setup even starts.
+  // before IMS setup even starts. ims.js's own promise is caught here (rather than let
+  // Promise.all reject the whole thing) so a hiccup loading the UNUSED module can't take down
+  // the path this function actually needs.
   const [useAlt, imsModule] = await Promise.all([
     altAuth.isAvailable(),
-    import('./ims.js'),
+    import('./ims.js').catch(() => null),
   ]);
-  const { loadIms, handleSignIn } = useAlt ? altAuth : imsModule;
+  const authModule = useAlt ? altAuth : imsModule;
+  if (!authModule) return; // ims.js failed to load and it's the one this page needs
+  const { loadIms, handleSignIn } = authModule;
 
   const imsDetails = await loadIms();
   if (!imsDetails.accessToken) {
