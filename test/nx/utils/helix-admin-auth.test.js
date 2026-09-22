@@ -132,8 +132,16 @@ describe('helix-admin-auth', () => {
       const { useAlt, authModule } = await fresh.resolveAuthProvider();
 
       expect(useAlt).to.equal(false);
-      expect(authModule).to.respondTo('loadIms');
-      expect(authModule).to.respondTo('handleSignIn');
+      // IMS_ORIGIN is real ims.js's own field, not one of this file's exports — checking for
+      // it (rather than just loadIms/handleSignIn, which both modules have) is what actually
+      // distinguishes "really ims.js" from "the false branch accidentally returning the alt
+      // provider's hand-built stub too." (A same-instance reference check would be a stronger
+      // signal still, but doesn't hold reliably here — this test runner's dev-server import-map
+      // rewriting can load ims.js as two separate module instances depending on how it's
+      // reached, confirmed empirically, so identity isn't a safe assertion across that split.)
+      expect(authModule).to.have.property('IMS_ORIGIN');
+      expect(authModule.loadIms).to.be.a('function');
+      expect(authModule.handleSignIn).to.be.a('function');
     });
   });
 

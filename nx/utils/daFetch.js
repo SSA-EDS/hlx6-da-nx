@@ -10,14 +10,14 @@ export function setImsDetails(token) {
 // decision (see that file's header for why it's a single function rather than a copy here and
 // in nx/utils/signin.js; this file's own previous copy is what motivated pulling it out).
 // This wrapper is just the dynamic-import indirection daFetch's two call sites below share.
-async function resolveAuthModule() {
+async function importAuthProvider() {
   const { resolveAuthProvider } = await import('./helix-admin-auth.js');
   return resolveAuthProvider();
 }
 
 export async function initIms() {
   if (imsDetails) return imsDetails;
-  const { authModule } = await resolveAuthModule();
+  const { authModule } = await importAuthProvider();
   if (!authModule) return null;
   try {
     imsDetails = await authModule.loadIms();
@@ -49,7 +49,7 @@ export const daFetch = async (url, opts = {}) => {
     resp = new Response(null, { status: 500, statusText: err.message });
   }
   if (resp.status === 401) {
-    const { useAlt, authModule } = await resolveAuthModule();
+    const { useAlt, authModule } = await importAuthProvider();
     if (useAlt) {
       // The alternate provider's handleSignIn() opens a popup, which needs a real user
       // gesture behind it — this reactive, post-fetch continuation never has one (unlike
