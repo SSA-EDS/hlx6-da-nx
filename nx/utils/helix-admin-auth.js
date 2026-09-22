@@ -6,7 +6,13 @@
 //
 // Exports the same function names as ims.js (loadIms, handleSignIn, handleSignOut) plus
 // isAvailable(), so the small set of top-level bootstrap choke points that gate sign-in
-// (nx/utils/signin.js, da-live's initIms()) can pick a provider without hardcoding one.
+// (nx/utils/signin.js, nx/utils/daFetch.js, da-live's initIms()) can pick a provider without
+// hardcoding one. resolveAuthProvider() below is the one, shared implementation of that pick —
+// nx/utils/signin.js and daFetch.js both call it rather than each carrying their own copy,
+// after daFetch.js's own copy went missing for a full review cycle before anyone noticed.
+// da-live's initIms() (a separate repo/PR) has its own inline version of the same logic and
+// could call this instead — it already imports this whole module — but consolidating a
+// different repo's already-reviewed PR is out of scope here; worth doing as a fast-follow.
 //
 // loadIms()'s resolved value is intentionally NOT ims.js's shape, though: the transient
 // site token this is built on (see helix-admin-ams's getTransientSiteTokenInfo) carries only
@@ -182,3 +188,20 @@ export const loadIms = (() => {
     return auth;
   };
 })();
+
+// The one, shared "which provider" decision — see the file header for why this exists as a
+// single function rather than each caller reimplementing it. Races isAvailable() against the
+// (lazy, side-effecting) ims.js import so a deployment with no alternate idp configured — the
+// common case — doesn't pay a sequential round trip before IMS setup even starts; ims.js's own
+// promise is caught here rather than left to reject the whole Promise.all, so a hiccup loading
+// the module the alt-provider path doesn't even need can't take down the path that does.
+export async function resolveAuthProvider() {
+  const [useAlt, imsModule] = await Promise.all([
+    isAvailable(),
+    import('./ims.js').catch(() => null),
+  ]);
+  return {
+    useAlt,
+    authModule: useAlt ? { loadIms, handleSignIn, handleSignOut } : imsModule,
+  };
+}

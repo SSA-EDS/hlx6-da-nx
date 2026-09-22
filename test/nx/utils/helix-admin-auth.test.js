@@ -110,6 +110,33 @@ describe('helix-admin-auth', () => {
     });
   });
 
+  describe('resolveAuthProvider', () => {
+    it('returns useAlt: true with this module\'s own functions when the alt provider is available', async () => {
+      window.fetch = sinon.stub().resolves({
+        ok: true,
+        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      });
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const { useAlt, authModule } = await fresh.resolveAuthProvider();
+
+      expect(useAlt).to.equal(true);
+      // Same functions this fresh module instance itself exports — not a copy/reimplementation.
+      expect(authModule.loadIms).to.equal(fresh.loadIms);
+      expect(authModule.handleSignIn).to.equal(fresh.handleSignIn);
+      expect(authModule.handleSignOut).to.equal(fresh.handleSignOut);
+    });
+
+    it('returns useAlt: false with the real ims.js module when no idp is configured', async () => {
+      window.fetch = sinon.stub().resolves({ ok: false });
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const { useAlt, authModule } = await fresh.resolveAuthProvider();
+
+      expect(useAlt).to.equal(false);
+      expect(authModule).to.respondTo('loadIms');
+      expect(authModule).to.respondTo('handleSignIn');
+    });
+  });
+
   describe('handleSignOut', () => {
     it('clears the stored token and the shared nx-ims flag', () => {
       storeRawToken('hlxtst_abc.def.ghi', Math.floor(Date.now() / 1000) + 3600);

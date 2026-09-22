@@ -6,20 +6,13 @@ export function setImsDetails(token) {
   imsDetails = { accessToken: { token } };
 }
 
-// Resolves whichever provider — ims.js or the alternate (helix-admin-auth.js) — this
-// deployment has configured, the same way nx/utils/signin.js picks one: ask the alternate
-// provider's isAvailable() (which never rejects), and race the (lazy, side-effecting) ims.js
-// import alongside it so a deployment with no alternate idp configured — the common case —
-// doesn't pay a sequential round trip before IMS setup even starts. ims.js's own promise is
-// caught here rather than left to reject the whole Promise.all, so a hiccup loading the
-// module the alt-provider path doesn't even need can't take down the path that does.
+// Delegates to helix-admin-auth.js's resolveAuthProvider() — the one, shared "which provider"
+// decision (see that file's header for why it's a single function rather than a copy here and
+// in nx/utils/signin.js; this file's own previous copy is what motivated pulling it out).
+// This wrapper is just the dynamic-import indirection daFetch's two call sites below share.
 async function resolveAuthModule() {
-  const altAuth = await import('./helix-admin-auth.js');
-  const [useAlt, imsModule] = await Promise.all([
-    altAuth.isAvailable(),
-    import('./ims.js').catch(() => null),
-  ]);
-  return { useAlt, authModule: useAlt ? altAuth : imsModule };
+  const { resolveAuthProvider } = await import('./helix-admin-auth.js');
+  return resolveAuthProvider();
 }
 
 export async function initIms() {

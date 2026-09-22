@@ -19,16 +19,7 @@ function renderSignInPrompt(onSignIn) {
 (async function signin() {
   document.body.style.display = 'none';
 
-  // Run discovery and the (lazy, side-effecting) ims.js import in parallel so a deployment
-  // with no alternate idp configured — the common case — doesn't pay a sequential round trip
-  // before IMS setup even starts. ims.js's own promise is caught here (rather than let
-  // Promise.all reject the whole thing) so a hiccup loading the UNUSED module can't take down
-  // the path this function actually needs.
-  const [useAlt, imsModule] = await Promise.all([
-    altAuth.isAvailable(),
-    import('./ims.js').catch(() => null),
-  ]);
-  const authModule = useAlt ? altAuth : imsModule;
+  const { useAlt, authModule } = await altAuth.resolveAuthProvider();
   if (!authModule) {
     // ims.js failed to load and it's the one this page needs — the page stays hidden with
     // no other recourse, so at least leave a diagnostic trail rather than fail in total silence.
