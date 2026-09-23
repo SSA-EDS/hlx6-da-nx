@@ -1,5 +1,53 @@
 # Worklog
 
+## 2026-09-24
+
+### Critical fix: discoverLoginUrl() picked whichever idp sorted first when no primary is pinned
+
+Found while wiring `nx2/utils/api.js` (below): a test that accidentally hit the real
+`/login` endpoint (instead of a stub) revealed that `discoverLoginUrl()` in
+`helix-admin-auth.js` was resolving `useAlt: true` against the *actual current* backend,
+which returns **five** `login_*` links (google, microsoft, adobe, adobe-stage,
+access-manager) — confirmed by querying it directly, not assumed. `HLX_ADMIN_AUTH_PROVIDER`
+isn't pinned there right now. The old code just grabbed the first non-`_sa` entry
+regardless of count, so it silently treated "no primary configured, offer everything" the
+same as "primary is access-manager" and picked an arbitrary provider (`login_google` here).
+Fixed: `discoverLoginUrl()` now only returns a link when there's **exactly one** candidate;
+more than one means nothing is pinned and IMS/Adobe stays default, matching the pre-migration
+behavior. This affected every choke point built so far (`signin.js`, `daFetch.js`, da-live's
+`initIms()`), not just the new one — none of them would have activated correctly against a
+real deployment with multiple idps configured and no `HLX_ADMIN_AUTH_PROVIDER` set. Also
+means: tomorrow's validation genuinely depends on that env var being set correctly on the
+target backend — I could not confirm it's set anywhere in checked-in Terraform, worth
+verifying directly against the live Lambda config before testing.
+
+### nx2/utils/api.js — wire the alt provider into the majority-traffic choke point
+
+`nx2/utils/api.js`'s `daFetch`/`loadIms`/`handleSignIn` (used by 27 files directly in this
+repo, and — per the original scoping doc — the facade behind ~33 of da-live's real call
+sites, i.e. most real DA traffic: bulk ops, the importer, localization, and — confirmed by
+reading `aem-preview-publish.js` — preview/publish too) was completely unwired from the alt
+provider; it always resolved real `ims.js` and called real IMS's `handleSignIn()`. Fixed the
+same way as `daFetch.js`: races `isAvailable()` against the existing nx/nx2 `ims.js`
+resolution, picks the alt module when available. Exports a new `useAlt` alongside
+`loadIms`/`handleSignIn` so `daFetch()`'s missing-token branch can skip calling the alt's
+`handleSignIn()` reactively (its popup needs a real click, which this reactive path doesn't
+have — da-live's `initIms()` now shows a real sign-in prompt instead, see that repo's log).
+
+Not wired, deliberately, same "narrow gate" reasoning as before: `nx2/blocks/{chat,feedback,
+profile}/*`, `nx2/utils/aem-preview-publish.js`'s `requestAemRole()` (needs real name/email/
+userId for a permission-request form — the alt token only carries email), and `nx2/scripts/
+nx.js`'s "fast-track IMS on return from sign-in" hash check. Also found and left alone:
+`nx2/utils/ims.js` is a *third* still-untouched, independently-diverged IMS implementation
+alongside `nx/utils/ims.js` — not a copy, its own thing.
+
+**Open question, still not resolved:** whether real users ever reach nx2-rendered content
+(bulk/localization/etc.) without having already been through some page that establishes a
+session first. Confirmed da-live's own `loadPage()` doesn't gate on this at all — checked the
+code directly, it calls `initIms()` just to prime state and renders regardless. So the
+sign-in-prompt-on-first-visit fix (da-live's `initIms()`, see that repo's WORKLOG) is real and
+needed, not speculative.
+
 ## 2026-09-23
 
 ### helix-admin-auth — isAuthenticated()/getAccessToken(), and Leo's bigger "full adapter" ask (deferred)
