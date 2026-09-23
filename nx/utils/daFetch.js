@@ -1,4 +1,5 @@
 import { DA_ORIGIN, AEM_ORIGIN } from '../public/utils/constants.js';
+import { isAuthenticated, getAccessToken, resolveAuthProvider } from './helix-admin-auth.js';
 
 let imsDetails;
 
@@ -6,30 +7,17 @@ export function setImsDetails(token) {
   imsDetails = { accessToken: { token } };
 }
 
-// Delegates to helix-admin-auth.js's resolveAuthProvider() — the one, shared "which provider"
-// decision (see that file's header for why it's a single function rather than a copy here and
-// in nx/utils/signin.js; this file's own previous copy is what motivated pulling it out).
-// This wrapper is just the dynamic-import indirection daFetch's two call sites below share.
-async function importAuthProvider() {
-  const { resolveAuthProvider } = await import('./helix-admin-auth.js');
-  return resolveAuthProvider();
-}
-
 export async function initIms() {
   if (imsDetails) return imsDetails;
-  const { authModule } = await importAuthProvider();
-  if (!authModule) return null;
-  try {
-    imsDetails = await authModule.loadIms();
-    return imsDetails;
-  } catch {
-    return null;
-  }
+  const accessToken = await getAccessToken();
+  if (!accessToken) return null;
+  imsDetails = { accessToken };
+  return imsDetails;
 }
 
 export const daFetch = async (url, opts = {}) => {
   opts.headers ||= {};
-  if (localStorage.getItem('nx-ims') || imsDetails) {
+  if (isAuthenticated() || imsDetails) {
     // initIms() legitimately resolves null (no provider available, or the active one's
     // loadIms() failed) — destructuring that directly throws instead of just skipping the
     // auth header, which is the correct degrade-gracefully behavior here.
@@ -49,7 +37,7 @@ export const daFetch = async (url, opts = {}) => {
     resp = new Response(null, { status: 500, statusText: err.message });
   }
   if (resp.status === 401) {
-    const { useAlt, authModule } = await importAuthProvider();
+    const { useAlt, authModule } = await resolveAuthProvider();
     if (useAlt) {
       // The alternate provider's handleSignIn() opens a popup, which needs a real user
       // gesture behind it — this reactive, post-fetch continuation never has one (unlike

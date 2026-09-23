@@ -1,5 +1,17 @@
 # Worklog
 
+## 2026-09-23
+
+### helix-admin-auth — isAuthenticated()/getAccessToken(), and Leo's bigger "full adapter" ask (deferred)
+
+Added `isAuthenticated()` and `getAccessToken()` to `nx/utils/helix-admin-auth.js`, alongside the existing `resolveAuthProvider()`. `daFetch.js`'s gate and token fetch now call these instead of touching `localStorage`/provider internals directly — closes the one concrete gap from PR D review (raw `localStorage.getItem('nx-ims')` check in a fetch helper). Also dropped `daFetch.js`'s `importAuthProvider()` dynamic-import wrapper in favor of a static import of `helix-admin-auth.js` — `isAuthenticated()` has to be synchronous for the gate, and once the module's statically imported for that anyway, the dynamic import's laziness rationale no longer applied.
+
+**Open question, deferred, not done:** review also asked for a much bigger change — one central `AUTH_PROVIDER` flag, a single `nx/utils/auth.js` adapter (`getAccessToken`/`signIn`/`signOut`/`applyAuthHeaders`/`isAuthenticated`), every call site (fetch helpers *and* UI code) going through it, no direct `window.adobeIMS`/`localStorage` checks anywhere. Agreed with Leo to stick with the narrow-gate scope for now (only `signin.js`/`daFetch.js` wired, per the earlier narrow-scope decision) and revisit the bigger version if the narrow one doesn't hold up after deploying/testing.
+
+Checked before punting on it — it's bigger than it looked. Grepped every file touching IMS directly: it's 17 production files, not the ~15 estimated earlier, and **`nx2/utils/ims.js` is its own independently-diverged IMS implementation**, not a copy of `nx/utils/ims.js` (different `loadIms` structure, org/profile fetching, iframe handling). So "single source of truth" is a pre-existing, bigger problem than this PR — doing it properly means touching two separately-diverged IMS implementations across nx and nx2, not just the two wired choke points. Files touching IMS directly outside those two: `nx/blocks/exp/views/login.js`, `nx/blocks/hero/hero.js`, `nx/blocks/media-library/indexing/build.js`, `nx/blocks/quick-edit-portal/src/prose.js`, `nx/blocks/quick-edit-portal/src/utils.js`, `nx/blocks/shell/shell.js`, `nx/blocks/profile/profile.js`, `nx/blocks/exp/utils.js`, `nx/blocks/secure-org/secure-org.js`, `nx/blocks/snapshot-admin/utils/utils.js`, `nx2/blocks/chat/chat-controller.js`, `nx2/blocks/chat/welcome/welcome.js`, `nx2/blocks/feedback/feedback-dialog.js`, `nx2/blocks/profile/profile.js`, `nx2/utils/aem-preview-publish.js`. A few of those (`prose.js`, `media-library/indexing/build.js`, `aem-preview-publish.js`, `profile.js`'s `switchProfile` call) skip even `ims.js`'s own exports and hit `window.adobeIMS` directly — pre-existing hygiene issue, unrelated to the alt-provider work.
+
+Also pushed back on the proposed `applyAuthHeaders(headers, url)` shape specifically: deciding which header a given URL needs (the `AEM_ORIGIN` check, `x-content-source-authorization`) is DA/AEM application logic, not "which auth provider" logic — folding it into a generic auth adapter mixes concerns. If/when the bigger refactor happens, keep header-shaping in `daFetch.js`; the adapter should just hand back a token.
+
 ## 2026-07-14
 
 ### nx2/styles/styles.css — pin to light mode

@@ -2,7 +2,7 @@ import { expect } from '@esm-bundle/chai';
 import sinon from 'sinon';
 import { HLX_ADMIN } from '../../../nx/utils/utils.js';
 import {
-  handleSignIn, handleSignOut, loadIms, testHooks, isAvailable,
+  handleSignIn, handleSignOut, loadIms, testHooks, isAvailable, isAuthenticated,
 } from '../../../nx/utils/helix-admin-auth.js';
 
 const STORAGE_KEY = 'da-helix-admin-auth';
@@ -145,6 +145,27 @@ describe('helix-admin-auth', () => {
     });
   });
 
+  describe('getAccessToken', () => {
+    it('returns the alt provider\'s token when a valid session is stored', async () => {
+      window.fetch = sinon.stub().resolves({
+        ok: true,
+        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      });
+      storeRawToken('hlxtst_abc.def.ghi', Math.floor(Date.now() / 1000) + 3600);
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      expect(await fresh.getAccessToken()).to.deep.equal({ token: 'hlxtst_abc.def.ghi' });
+    });
+
+    it('returns null when the alt provider has no session', async () => {
+      window.fetch = sinon.stub().resolves({
+        ok: true,
+        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      });
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      expect(await fresh.getAccessToken()).to.equal(null);
+    });
+  });
+
   describe('handleSignOut', () => {
     it('clears the stored token and the shared nx-ims flag', () => {
       storeRawToken('hlxtst_abc.def.ghi', Math.floor(Date.now() / 1000) + 3600);
@@ -152,6 +173,17 @@ describe('helix-admin-auth', () => {
       handleSignOut();
       expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
       expect(localStorage.getItem('nx-ims')).to.equal(null);
+    });
+  });
+
+  describe('isAuthenticated', () => {
+    it('returns false when nx-ims is not set', () => {
+      expect(isAuthenticated()).to.equal(false);
+    });
+
+    it('returns true when nx-ims is set', () => {
+      localStorage.setItem('nx-ims', true);
+      expect(isAuthenticated()).to.equal(true);
     });
   });
 

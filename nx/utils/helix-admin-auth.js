@@ -14,6 +14,9 @@
 // could call this instead — it already imports this whole module — but consolidating a
 // different repo's already-reviewed PR is out of scope here; worth doing as a fast-follow.
 //
+// isAuthenticated() and getAccessToken() sit above the provider split too, for callers that
+// just want a yes/no or a token and don't need useAlt/authModule at all.
+//
 // loadIms()'s resolved value is intentionally NOT ims.js's shape, though: the transient
 // site token this is built on (see helix-admin-ams's getTransientSiteTokenInfo) carries only
 // `sub` (email) and `exp` — no org list, no adobe.io profile. Consumers that read ims.js's
@@ -92,6 +95,13 @@ function storeToken(siteToken) {
 export function handleSignOut() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem('nx-ims');
+}
+
+// Provider-agnostic on purpose — nx-ims is the shared flag (see readStoredToken above), so
+// this doesn't need to know which provider is active. Exists so callers like daFetch's gate
+// have a named check instead of reading localStorage themselves.
+export function isAuthenticated() {
+  return !!localStorage.getItem('nx-ims');
 }
 
 // helix-admin's /login already applies isIdpAvailable()/HLX_ADMIN_AUTH_PROVIDER (see
@@ -204,4 +214,16 @@ export async function resolveAuthProvider() {
     useAlt,
     authModule: useAlt ? { loadIms, handleSignIn, handleSignOut } : imsModule,
   };
+}
+
+// The token half of the adapter surface — callers that just want something to put in an
+// Authorization header don't need resolveAuthProvider()'s useAlt/authModule split at all.
+export async function getAccessToken() {
+  const { authModule } = await resolveAuthProvider();
+  try {
+    const details = await authModule?.loadIms();
+    return details?.accessToken ?? null;
+  } catch {
+    return null;
+  }
 }
