@@ -104,17 +104,22 @@ export function isAuthenticated() {
   return !!localStorage.getItem('nx-ims');
 }
 
-// helix-admin's /login already applies isIdpAvailable()/HLX_ADMIN_AUTH_PROVIDER (see
-// helix-admin-ams src/login/login.js) and returns exactly one login_<name> link when a
-// deployment has a primary idp set. Read whichever one comes back — never the idp's name.
+// helix-admin's /login returns every idp with real credentials configured — ALL of them
+// (google, microsoft, adobe, ...), not just one, whenever HLX_ADMIN_AUTH_PROVIDER isn't set
+// (confirmed against the real endpoint, not assumed: it returns five separate providers today).
+// It only narrows to exactly one login_<name> link when that env var pins a single primary
+// (isIdpAvailable() in helix-admin-ams). So the count itself is the signal: more than one link
+// means nothing is pinned and IMS/Adobe should stay the default, same as before this file
+// existed — picking whichever entry happens to sort first (the previous behavior here) would
+// silently misroute to an arbitrary provider instead. Never read the idp's name either way.
 async function discoverLoginUrl() {
   const resp = await fetch(`${HLX_ADMIN}/login`, { credentials: 'omit' });
   if (!resp.ok) return null;
   const { links } = await resp.json();
-  const entry = Object.entries(links || {}).find(
+  const entries = Object.entries(links || {}).filter(
     ([key]) => key.startsWith('login_') && !key.endsWith('_sa'),
   );
-  return entry?.[1] || null;
+  return entries.length === 1 ? entries[0][1] : null;
 }
 
 // Called from top-level bootstrap choke points on every page load (unlike discoverLoginUrl's

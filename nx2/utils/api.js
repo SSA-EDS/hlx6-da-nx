@@ -1,14 +1,23 @@
 /* eslint-disable no-use-before-define */
 import { HLX_ADMIN, AEM_API, DA_ADMIN, ALLOWED_TOKEN } from './utils.js';
 
-export const { loadIms, handleSignIn } = await (async () => {
-  try {
-    const { getNx } = await import(`${window.location.origin}/scripts/utils.js`);
-    return await import(`${getNx()}/utils/ims.js`);
-  } catch {
-    // Default to NX1 ims.js
-    return import('../../nx/utils/ims.js');
-  }
+// Races the alt-provider check against the existing nx/nx2 ims.js resolution below, same
+// reasoning as helix-admin-auth.js's resolveAuthProvider() — a deployment with no alt idp
+// configured (the common case) shouldn't pay a sequential round trip first.
+export const { loadIms, handleSignIn, useAlt } = await (async () => {
+  const imsModulePromise = (async () => {
+    try {
+      const { getNx } = await import(`${window.location.origin}/scripts/utils.js`);
+      return await import(`${getNx()}/utils/ims.js`);
+    } catch {
+      // Default to NX1 ims.js
+      return import('../../nx/utils/ims.js');
+    }
+  })();
+  const altAuth = await import('../../nx/utils/helix-admin-auth.js');
+  const [alt, imsModule] = await Promise.all([altAuth.isAvailable(), imsModulePromise]);
+  const authModule = alt ? altAuth : imsModule;
+  return { loadIms: authModule.loadIms, handleSignIn: authModule.handleSignIn, useAlt: alt };
 })();
 
 export { AEM_API };
@@ -429,7 +438,11 @@ export const asText = (promise) => unwrap(promise, 'text');
 export const daFetch = async ({ url, opts = { method: 'GET' }, redirect = false }) => {
   const { accessToken } = await loadIms();
   if (!accessToken) {
-    handleSignIn();
+    // The alt provider's handleSignIn() opens a popup, which needs a real user gesture behind
+    // it — this reactive, no-token-yet path (unlike ims.js's gesture-free top-level redirect)
+    // never has one. da-live's initIms()/loadPage() shows a real "Sign in" prompt instead,
+    // which does have a click behind it; calling handleSignIn() here would just silently no-op.
+    if (!useAlt) handleSignIn();
     return {};
   }
 
