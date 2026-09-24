@@ -1,4 +1,5 @@
 import { DA_ORIGIN, AEM_ORIGIN } from '../public/utils/constants.js';
+import { isAuthenticated, getAccessToken, resolveAuthProvider } from './helix-admin-auth.js';
 
 let imsDetails;
 
@@ -8,19 +9,19 @@ export function setImsDetails(token) {
 
 export async function initIms() {
   if (imsDetails) return imsDetails;
-  const { loadIms } = await import('./ims.js');
-  try {
-    imsDetails = await loadIms();
-    return imsDetails;
-  } catch {
-    return null;
-  }
+  const accessToken = await getAccessToken();
+  if (!accessToken) return null;
+  imsDetails = { accessToken };
+  return imsDetails;
 }
 
 export const daFetch = async (url, opts = {}) => {
   opts.headers ||= {};
-  if (localStorage.getItem('nx-ims') || imsDetails) {
-    const { accessToken } = await initIms();
+  if (isAuthenticated() || imsDetails) {
+    // initIms() legitimately resolves null (no provider available, or the active one's
+    // loadIms() failed) — destructuring that directly throws instead of just skipping the
+    // auth header, which is the correct degrade-gracefully behavior here.
+    const accessToken = (await initIms())?.accessToken;
     if (accessToken) {
       opts.headers.Authorization = `Bearer ${accessToken.token}`;
 
@@ -36,9 +37,18 @@ export const daFetch = async (url, opts = {}) => {
     resp = new Response(null, { status: 500, statusText: err.message });
   }
   if (resp.status === 401) {
-    const { loadIms, handleSignIn } = await import('./ims.js');
-    await loadIms();
-    handleSignIn();
+    const { useAlt, authModule } = await resolveAuthProvider();
+    if (useAlt) {
+      // The alternate provider's handleSignIn() opens a popup, which needs a real user
+      // gesture behind it — this reactive, post-fetch continuation never has one (unlike
+      // ims.js's handleSignIn() below, a gesture-free top-level redirect in the common
+      // case). Clear the now-invalid session instead; the next real sign-in prompt (e.g.
+      // nx/utils/signin.js's gate, which does require a click) picks it up correctly.
+      authModule?.handleSignOut();
+    } else if (authModule) {
+      await authModule.loadIms();
+      authModule.handleSignIn();
+    }
   }
   resp.permissions = resp.headers.get('x-da-actions')?.split('=').pop().split(',');
   return resp;

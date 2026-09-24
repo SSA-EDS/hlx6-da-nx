@@ -1,5 +1,89 @@
 # Worklog
 
+## 2026-09-24 (2)
+
+### Security fix: handleSignIn() only checked https:, not same-origin, before navigating the popup
+
+Leo's review of PR D flagged this directly (HIGH, 9/10): the popup-navigation guard in
+`helix-admin-auth.js`'s `handleSignIn()` checked `url.protocol === 'https:'` but never checked
+the discovered login URL was actually on `HLX_ADMIN`'s origin — the code's own comment claimed
+"/login only ever returns a same-deployment helix-admin URL" without enforcing it. A
+compromised or misconfigured backend response (or a MITM on the discovery fetch) could point
+the popup at an arbitrary `https://` origin — phishing / token interception.
+
+Fixed: the check is now `url.origin !== targetOrigin` (subsumes the old protocol check too —
+`HLX_ADMIN` is itself https, and a `javascript:` URI's origin is the string `"null"`, never a
+real origin). Confirmed before tightening this that it can't reject the legitimate flow: the
+real `/login` response's links are always same-origin `.../auth/<provider>` paths (checked
+directly against the live endpoint earlier tonight, not assumed). New test
+(`closes the popup rather than navigating it to a cross-origin login URL, even over https`)
+mutation-checked against the old code to confirm it actually catches this — it does.
+
+My own read on severity: a notch below Leo's 9/10, since exploiting this needs a MITM position
+or backend compromise, not something reachable by an ordinary attacker directly. Fixed
+regardless — cheap, no tradeoff, and this is exactly the kind of thing worth being paranoid
+about in an auth popup.
+
+## 2026-09-24
+
+### Critical fix: discoverLoginUrl() picked whichever idp sorted first when no primary is pinned
+
+Found while wiring `nx2/utils/api.js` (below): a test that accidentally hit the real
+`/login` endpoint (instead of a stub) revealed that `discoverLoginUrl()` in
+`helix-admin-auth.js` was resolving `useAlt: true` against the *actual current* backend,
+which returns **five** `login_*` links (google, microsoft, adobe, adobe-stage,
+access-manager) — confirmed by querying it directly, not assumed. `HLX_ADMIN_AUTH_PROVIDER`
+isn't pinned there right now. The old code just grabbed the first non-`_sa` entry
+regardless of count, so it silently treated "no primary configured, offer everything" the
+same as "primary is access-manager" and picked an arbitrary provider (`login_google` here).
+Fixed: `discoverLoginUrl()` now only returns a link when there's **exactly one** candidate;
+more than one means nothing is pinned and IMS/Adobe stays default, matching the pre-migration
+behavior. This affected every choke point built so far (`signin.js`, `daFetch.js`, da-live's
+`initIms()`), not just the new one — none of them would have activated correctly against a
+real deployment with multiple idps configured and no `HLX_ADMIN_AUTH_PROVIDER` set. Also
+means: tomorrow's validation genuinely depends on that env var being set correctly on the
+target backend — I could not confirm it's set anywhere in checked-in Terraform, worth
+verifying directly against the live Lambda config before testing.
+
+### nx2/utils/api.js — wire the alt provider into the majority-traffic choke point
+
+`nx2/utils/api.js`'s `daFetch`/`loadIms`/`handleSignIn` (used by 27 files directly in this
+repo, and — per the original scoping doc — the facade behind ~33 of da-live's real call
+sites, i.e. most real DA traffic: bulk ops, the importer, localization, and — confirmed by
+reading `aem-preview-publish.js` — preview/publish too) was completely unwired from the alt
+provider; it always resolved real `ims.js` and called real IMS's `handleSignIn()`. Fixed the
+same way as `daFetch.js`: races `isAvailable()` against the existing nx/nx2 `ims.js`
+resolution, picks the alt module when available. Exports a new `useAlt` alongside
+`loadIms`/`handleSignIn` so `daFetch()`'s missing-token branch can skip calling the alt's
+`handleSignIn()` reactively (its popup needs a real click, which this reactive path doesn't
+have — da-live's `initIms()` now shows a real sign-in prompt instead, see that repo's log).
+
+Not wired, deliberately, same "narrow gate" reasoning as before: `nx2/blocks/{chat,feedback,
+profile}/*`, `nx2/utils/aem-preview-publish.js`'s `requestAemRole()` (needs real name/email/
+userId for a permission-request form — the alt token only carries email), and `nx2/scripts/
+nx.js`'s "fast-track IMS on return from sign-in" hash check. Also found and left alone:
+`nx2/utils/ims.js` is a *third* still-untouched, independently-diverged IMS implementation
+alongside `nx/utils/ims.js` — not a copy, its own thing.
+
+**Open question, still not resolved:** whether real users ever reach nx2-rendered content
+(bulk/localization/etc.) without having already been through some page that establishes a
+session first. Confirmed da-live's own `loadPage()` doesn't gate on this at all — checked the
+code directly, it calls `initIms()` just to prime state and renders regardless. So the
+sign-in-prompt-on-first-visit fix (da-live's `initIms()`, see that repo's WORKLOG) is real and
+needed, not speculative.
+
+## 2026-09-23
+
+### helix-admin-auth — isAuthenticated()/getAccessToken(), and Leo's bigger "full adapter" ask (deferred)
+
+Added `isAuthenticated()` and `getAccessToken()` to `nx/utils/helix-admin-auth.js`, alongside the existing `resolveAuthProvider()`. `daFetch.js`'s gate and token fetch now call these instead of touching `localStorage`/provider internals directly — closes the one concrete gap from PR D review (raw `localStorage.getItem('nx-ims')` check in a fetch helper). Also dropped `daFetch.js`'s `importAuthProvider()` dynamic-import wrapper in favor of a static import of `helix-admin-auth.js` — `isAuthenticated()` has to be synchronous for the gate, and once the module's statically imported for that anyway, the dynamic import's laziness rationale no longer applied.
+
+**Open question, deferred, not done:** review also asked for a much bigger change — one central `AUTH_PROVIDER` flag, a single `nx/utils/auth.js` adapter (`getAccessToken`/`signIn`/`signOut`/`applyAuthHeaders`/`isAuthenticated`), every call site (fetch helpers *and* UI code) going through it, no direct `window.adobeIMS`/`localStorage` checks anywhere. Agreed with Leo to stick with the narrow-gate scope for now (only `signin.js`/`daFetch.js` wired, per the earlier narrow-scope decision) and revisit the bigger version if the narrow one doesn't hold up after deploying/testing.
+
+Checked before punting on it — it's bigger than it looked. Grepped every file touching IMS directly: it's 17 production files, not the ~15 estimated earlier, and **`nx2/utils/ims.js` is its own independently-diverged IMS implementation**, not a copy of `nx/utils/ims.js` (different `loadIms` structure, org/profile fetching, iframe handling). So "single source of truth" is a pre-existing, bigger problem than this PR — doing it properly means touching two separately-diverged IMS implementations across nx and nx2, not just the two wired choke points. Files touching IMS directly outside those two: `nx/blocks/exp/views/login.js`, `nx/blocks/hero/hero.js`, `nx/blocks/media-library/indexing/build.js`, `nx/blocks/quick-edit-portal/src/prose.js`, `nx/blocks/quick-edit-portal/src/utils.js`, `nx/blocks/shell/shell.js`, `nx/blocks/profile/profile.js`, `nx/blocks/exp/utils.js`, `nx/blocks/secure-org/secure-org.js`, `nx/blocks/snapshot-admin/utils/utils.js`, `nx2/blocks/chat/chat-controller.js`, `nx2/blocks/chat/welcome/welcome.js`, `nx2/blocks/feedback/feedback-dialog.js`, `nx2/blocks/profile/profile.js`, `nx2/utils/aem-preview-publish.js`. A few of those (`prose.js`, `media-library/indexing/build.js`, `aem-preview-publish.js`, `profile.js`'s `switchProfile` call) skip even `ims.js`'s own exports and hit `window.adobeIMS` directly — pre-existing hygiene issue, unrelated to the alt-provider work.
+
+Also pushed back on the proposed `applyAuthHeaders(headers, url)` shape specifically: deciding which header a given URL needs (the `AEM_ORIGIN` check, `x-content-source-authorization`) is DA/AEM application logic, not "which auth provider" logic — folding it into a generic auth adapter mixes concerns. If/when the bigger refactor happens, keep header-shaping in `daFetch.js`; the adapter should just hand back a token.
+
 ## 2026-07-14
 
 ### nx2/styles/styles.css — pin to light mode
