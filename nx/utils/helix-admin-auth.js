@@ -141,6 +141,7 @@ export function handleSignIn() {
   if (!popup) return;
 
   (async () => {
+    const targetOrigin = new URL(HLX_ADMIN).origin;
     let url;
     try {
       const loginUrl = await discoverLoginUrl();
@@ -148,13 +149,17 @@ export function handleSignIn() {
     } catch {
       url = null;
     }
-    // /login only ever returns a same-deployment helix-admin URL (see discoverLoginUrl) —
-    // the protocol check guards against a misconfigured or compromised backend response
-    // navigating the popup somewhere unexpected (e.g. a javascript: URI, which would run in
-    // this same-origin popup). A rejected discovery fetch (network blip, bad JSON, etc.) hits
-    // the same close-and-give-up path as "no idp configured" — leaving the popup open and
-    // blank forever on a transient error would be worse than closing it.
-    if (!url || url.protocol !== 'https:') {
+    // /login only ever returns a same-deployment helix-admin URL (see discoverLoginUrl) — an
+    // origin check enforces that rather than just checking https:, which a compromised or
+    // misconfigured backend response could still satisfy while pointing anywhere else (a
+    // phishing/token-interception risk this popup would otherwise navigate straight to). Origin
+    // match also subsumes the old protocol check on its own: HLX_ADMIN is itself https, and a
+    // javascript: URI's origin is the string "null", never a real origin. Confirmed the real
+    // /login response's links are always same-origin (.../auth/<provider>) before tightening
+    // this, so it can't reject the legitimate flow. A rejected discovery fetch (network blip,
+    // bad JSON, etc.) hits the same close-and-give-up path as "no idp configured" — leaving the
+    // popup open and blank forever on a transient error would be worse than closing it.
+    if (!url || url.origin !== targetOrigin) {
       popup.close();
       return;
     }
@@ -164,7 +169,6 @@ export function handleSignIn() {
     url.searchParams.set('response_mode', 'popup');
     popup.location = url.href;
 
-    const targetOrigin = new URL(HLX_ADMIN).origin;
     let settled = false;
     const finish = () => {
       settled = true;

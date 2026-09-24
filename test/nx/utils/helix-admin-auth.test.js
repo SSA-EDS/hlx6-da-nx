@@ -308,6 +308,21 @@ describe('helix-admin-auth', () => {
       expect(popup.location).to.equal('');
     });
 
+    it('closes the popup rather than navigating it to a cross-origin login URL, even over https', async () => {
+      const popup = makePopupStub();
+      window.open = sinon.stub().returns(popup);
+      window.fetch = sinon.stub().resolves({
+        ok: true,
+        json: async () => ({ links: { 'login_access-manager': 'https://evil.example/phish' } }),
+      });
+
+      handleSignIn();
+      await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+      expect(popup.close.calledOnce).to.equal(true);
+      expect(popup.location).to.equal('');
+    });
+
     it('stores the token and reloads on a valid postMessage from the popup', async () => {
       // A real window, not the plain-object stub: MessageEvent's `source` field only
       // accepts an actual Window/MessagePort/ServiceWorker (confirmed empirically — even a
