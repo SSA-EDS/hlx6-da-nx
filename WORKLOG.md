@@ -1,5 +1,29 @@
 # Worklog
 
+## 2026-09-24 (2)
+
+### Security fix: handleSignIn() only checked https:, not same-origin, before navigating the popup
+
+Leo's review of PR D flagged this directly (HIGH, 9/10): the popup-navigation guard in
+`helix-admin-auth.js`'s `handleSignIn()` checked `url.protocol === 'https:'` but never checked
+the discovered login URL was actually on `HLX_ADMIN`'s origin — the code's own comment claimed
+"/login only ever returns a same-deployment helix-admin URL" without enforcing it. A
+compromised or misconfigured backend response (or a MITM on the discovery fetch) could point
+the popup at an arbitrary `https://` origin — phishing / token interception.
+
+Fixed: the check is now `url.origin !== targetOrigin` (subsumes the old protocol check too —
+`HLX_ADMIN` is itself https, and a `javascript:` URI's origin is the string `"null"`, never a
+real origin). Confirmed before tightening this that it can't reject the legitimate flow: the
+real `/login` response's links are always same-origin `.../auth/<provider>` paths (checked
+directly against the live endpoint earlier tonight, not assumed). New test
+(`closes the popup rather than navigating it to a cross-origin login URL, even over https`)
+mutation-checked against the old code to confirm it actually catches this — it does.
+
+My own read on severity: a notch below Leo's 9/10, since exploiting this needs a MITM position
+or backend compromise, not something reachable by an ordinary attacker directly. Fixed
+regardless — cheap, no tradeoff, and this is exactly the kind of thing worth being paranoid
+about in an auth popup.
+
 ## 2026-09-24
 
 ### Critical fix: discoverLoginUrl() picked whichever idp sorted first when no primary is pinned
