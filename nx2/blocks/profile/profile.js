@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'da-lit';
 import { getConfig, loc } from '../../scripts/nx.js';
-import { loadIms, handleSignOut, handleSignIn } from '../../utils/ims.js';
+import { resolveAuthProvider } from '../../../nx/utils/helix-admin-auth.js';
 import { loadStyle } from '../../utils/utils.js';
 import { signout } from '../../utils/api.js';
 
@@ -61,14 +61,22 @@ class NxProfile extends LitElement {
   }
 
   async loadIms() {
-    // Attempt to load IMS
+    // Resolved once here, before this component ever renders a Sign In button — so its click
+    // handler below binds to an already-settled provider, safe to call directly from the click
+    // itself (see helix-admin-auth.js's resolveAuthProvider() for why that ordering matters for
+    // the alt provider's popup).
+    const { useAlt, authModule } = await resolveAuthProvider();
+    this._authModule = authModule;
     try {
-      this._ims = await loadIms(this.loginPopup);
+      this._ims = await authModule.loadIms(this.loginPopup);
     } catch {
       config.log('Could not load IMS.');
     }
 
-    if (!this._ims.anonymous) {
+    // The alt provider's token only carries enough to authenticate requests, not the rich
+    // profile fields (avatar, org list) real IMS provides — nothing to fetch for it here. Don't
+    // fabricate placeholder org/avatar data — blank fields are more honest than fake-looking ones.
+    if (!this._ims.anonymous && !useAlt) {
       // Attempt to get avatar
       try {
         const { user } = await this._ims.getIo();
@@ -120,7 +128,7 @@ class NxProfile extends LitElement {
     } catch {
       config.log('Could not sign out');
     }
-    handleSignOut();
+    this._authModule?.handleSignOut();
     const opts = { bubbles: true, composed: true };
     const event = new CustomEvent('signout', opts);
     this.dispatchEvent(event);
@@ -181,7 +189,7 @@ class NxProfile extends LitElement {
 
   renderSignIn() {
     return html`
-      <button class="signin-btn" @click=${handleSignIn}>${loc`Sign in`}</button>
+      <button class="signin-btn" @click=${this._authModule?.handleSignIn}>${loc`Sign in`}</button>
     `;
   }
 
