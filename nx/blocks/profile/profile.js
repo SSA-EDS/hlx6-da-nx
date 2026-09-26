@@ -4,7 +4,7 @@ import getStyle from '../../utils/styles.js';
 import { getSvg } from '../../utils/svg.js';
 import { daFetch } from '../../utils/daFetch.js';
 import { DA_ORIGIN } from '../../public/utils/constants.js';
-import { loadIms, handleSignIn, handleSignOut } from '../../utils/ims.js';
+import { resolveAuthProvider } from '../../utils/helix-admin-auth.js';
 
 const { nxBase } = getConfig();
 const style = await getStyle(import.meta.url);
@@ -37,21 +37,33 @@ class NxProfile extends LitElement {
 
   async getDetails() {
     try {
-      this._details = await loadIms(this.loginPopup);
+      // Resolved once here, before this component ever renders a Sign In button — so its
+      // click handler below binds to an already-settled provider, safe to call directly from
+      // the click itself (see helix-admin-auth.js's resolveAuthProvider() for why that
+      // ordering matters for the alt provider's popup).
+      const { useAlt, authModule } = await resolveAuthProvider();
+      this._authModule = authModule;
+      this._details = await authModule.loadIms(this.loginPopup);
       if (this._details.anonymous) {
         this._signedIn = false;
         return;
       }
-      try {
-        const { user } = await this._details.getIo();
-        this._avatar = user.avatar;
-      } catch {
-        // eslint-disable-next-line no-console
-        console.log('Could not get avatar');
-        this._avatar = `${nxBase}/public/icons/S2_Icon_User_20_N.svg`;
+      // The alt provider's token only carries enough to authenticate requests, not the rich
+      // profile fields (avatar, org list) real IMS provides — nothing to fetch for it here.
+      // Don't fabricate placeholder org/avatar data — a caller reading blank fields is more
+      // honest than one reading fake-looking ones.
+      if (!useAlt) {
+        try {
+          const { user } = await this._details.getIo();
+          this._avatar = user.avatar;
+        } catch {
+          // eslint-disable-next-line no-console
+          console.log('Could not get avatar');
+          this._avatar = `${nxBase}/public/icons/S2_Icon_User_20_N.svg`;
+        }
+        this.getOrg();
       }
       this._signedIn = true;
-      this.getOrg();
       this.setIcons();
     } catch {
       this._signedIn = false;
@@ -102,7 +114,7 @@ class NxProfile extends LitElement {
     } catch {
       // logout did not work.
     }
-    handleSignOut();
+    this._authModule?.handleSignOut();
     const opts = { bubbles: true, composed: true };
     const event = new CustomEvent('signout', opts);
     this.dispatchEvent(event);
@@ -114,7 +126,7 @@ class NxProfile extends LitElement {
 
   renderSignIn() {
     return html`
-      <button class="nx-btn-signin" @click=${handleSignIn}>Sign in</button>
+      <button class="nx-btn-signin" @click=${this._authModule?.handleSignIn}>Sign in</button>
     `;
   }
 

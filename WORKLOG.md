@@ -1,5 +1,37 @@
 # Worklog
 
+## 2026-09-25
+
+### Critical: the actual nav "Sign in" button was never wired to the alt provider at all
+
+Found live, in production, while troubleshooting with the user: fresh incognito, correctly-deployed
+code, correctly-configured backend (`HLX_ADMIN_AUTH_PROVIDER=access-manager` confirmed live) — and
+clicking "Sign in" still went straight to real Adobe IMS. Root cause: `nx/blocks/profile/profile.js`
+and `nx2/blocks/profile/profile.js` (the nav's profile/sign-in component — the actual button a real
+user clicks) import `handleSignIn` directly from `ims.js`, unconditionally. This was part of the
+original "narrow gate" scope decision, but that framing was wrong for this specific file: profile.js
+was excluded because it needs IMS's *rich profile data* (org list, name, avatar) to render the
+signed-in menu, which is true — but the *sign-in button itself* needs none of that, just the right
+provider's `handleSignIn()`. The rich-data need and the sign-in trigger got bundled together and
+both were left unwired, when only one of them actually required it.
+
+Fixed in both files: resolve the provider once in the component's existing async data-load
+(`getDetails()`/`loadIms()`), before the component ever renders a Sign In button — so by the time
+the button exists in the DOM, its `@click` binds to an already-resolved, plain function reference,
+same "resolve before render" safety as `nx/utils/signin.js`. `handleSignOut()` fixed the same way
+(was calling real IMS's `handleSignOut()`/`window.adobeIMS.signOut()` unconditionally, which would
+have thrown for an alt-provider session once someone actually got signed in).
+
+**Deliberately not fixed, flagged as a known follow-up**: an alt-provider-signed-in user sees a
+mostly-blank profile menu (no avatar, no name/email, no org switcher) — there's genuinely no data
+to show them, and fabricating placeholder values would be worse than blank. Making that menu look
+reasonable for an alt-provider user is a real, separate design question, not a quick fix.
+
+**Verification note**: could not get a clean full-suite run in this environment tonight —
+confirmed via `git stash` baseline comparison that the ~150-180 failures present either way are
+pre-existing environmental noise (unrelated file, e.g. snapshot-admin), not caused by this change.
+Lint clean; fix verified by tracing the render lifecycle carefully rather than a fresh test run.
+
 ## 2026-09-24 (2)
 
 ### Security fix: handleSignIn() only checked https:, not same-origin, before navigating the popup
