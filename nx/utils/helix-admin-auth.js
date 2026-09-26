@@ -135,9 +135,16 @@ export const isAvailable = (() => {
 })();
 
 export function handleSignIn() {
+  // Centered on the current window (not just the screen, which would ignore which monitor
+  // the caller's window is actually on) — window.open() has no auto-center option of its own,
+  // it just defaults to wherever the browser's own placement heuristic puts a bare width/height.
+  const width = 500;
+  const height = 650;
+  const left = window.screenX + (window.outerWidth - width) / 2;
+  const top = window.screenY + (window.outerHeight - height) / 2;
   // Opened synchronously, in the same task as the caller's click — popup blockers reject
   // window.open() called after an await, so discovery has to happen after opening, not before.
-  const popup = window.open('', 'da-helix-admin-auth', 'width=500,height=650');
+  const popup = window.open('', 'da-helix-admin-auth', `width=${width},height=${height},left=${left},top=${top}`);
   if (!popup) return;
 
   (async () => {
