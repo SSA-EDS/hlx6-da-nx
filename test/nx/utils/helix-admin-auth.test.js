@@ -11,8 +11,8 @@ function b64url(obj) {
   return btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function makeSiteToken(exp) {
-  return `hlxtst_header.${b64url({ exp })}.sig`;
+function makeSiteToken(exp, sub) {
+  return `hlxtst_header.${b64url({ exp, sub })}.sig`;
 }
 
 function storeRawToken(token, exp) {
@@ -51,6 +51,14 @@ describe('helix-admin-auth', () => {
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       const result = await fresh.loadIms();
       expect(result).to.deep.equal({ accessToken: { token: 'hlxtst_abc.def.ghi' } });
+    });
+
+    it('surfaces the token payload\'s sub claim as email', async () => {
+      const futureExp = Math.floor(Date.now() / 1000) + 3600;
+      storeRawToken(makeSiteToken(futureExp, 'user@example.com'), futureExp);
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const result = await fresh.loadIms();
+      expect(result.email).to.equal('user@example.com');
     });
 
     it('treats an expired stored token as anonymous and clears it', async () => {
