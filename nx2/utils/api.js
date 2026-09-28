@@ -87,45 +87,53 @@ export const config = {
     const finalUrl = cachebust
       ? `${url}${url.includes('?') ? '&' : '?'}nocache=${Date.now()}`
       : url;
-    return daFetch({ url: finalUrl });
+    return daFetch({ url: finalUrl, org, site });
   }),
 
   save: withArgs(async ({ org, site, body }) => {
     const url = await getDaApiPath(CONFIG, org, site);
     const formData = new FormData();
     formData.append(CONFIG, body);
-    return daFetch({ url, opts: { method: 'PUT', body: formData } });
+    return daFetch({
+      url, opts: { method: 'PUT', body: formData }, org, site,
+    });
   }),
 
   delete: withArgs(async ({ org, site }) => {
     const url = await getDaApiPath(CONFIG, org, site);
-    return daFetch({ url, opts: { method: 'DELETE' } });
+    return daFetch({ url, opts: { method: 'DELETE' }, org, site });
   }),
 
   getAggregated: withArgs(async ({ org, site }) => {
     const hlx6 = await isHlx6(org, site);
     if (!hlx6) return { ...HLX6_ONLY };
     const url = `${AEM_API}/${org}/aggregated/${site}/config.json`;
-    return daFetch({ url });
+    return daFetch({ url, org, site });
   }),
 };
 
 // jobs: background job control.
 export const jobs = {
-  get: async ({ org, site, topic, name }) => {
+  get: async ({
+    org, site, topic, name,
+  }) => {
     const tail = name ? `/${topic}/${name}` : `/${topic}`;
     const url = await getAemApiPath('jobs', org, site, tail);
-    return daFetch({ url });
+    return daFetch({ url, org, site });
   },
 
-  details: async ({ org, site, topic, name }) => {
+  details: async ({
+    org, site, topic, name,
+  }) => {
     const url = await getAemApiPath('jobs', org, site, `/${topic}/${name}/details`);
-    return daFetch({ url });
+    return daFetch({ url, org, site });
   },
 
-  stop: async ({ org, site, topic, name }) => {
+  stop: async ({
+    org, site, topic, name,
+  }) => {
     const url = await getAemApiPath('jobs', org, site, `/${topic}/${name}`);
-    return daFetch({ url, opts: { method: 'DELETE' } });
+    return daFetch({ url, opts: { method: 'DELETE' }, org, site });
   },
 };
 
@@ -144,57 +152,75 @@ export const signout = () => {
 export const snapshot = {
   list: async ({ org, site }) => {
     const url = await getAemApiPath('snapshots', org, site);
-    return daFetch({ url });
+    return daFetch({ url, org, site });
   },
 
   get: async ({ org, site, snapshotId }) => {
     const url = await getAemApiPath('snapshots', org, site, `/${snapshotId}`);
-    return daFetch({ url });
+    return daFetch({ url, org, site });
   },
 
-  save: async ({ org, site, snapshotId, body }) => {
+  save: async ({
+    org, site, snapshotId, body,
+  }) => {
     const url = await getAemApiPath('snapshots', org, site, `/${snapshotId}`);
     const opts = body ? jsonOpts('POST', body) : { method: 'POST' };
-    return daFetch({ url, opts });
+    return daFetch({
+      url, opts, org, site,
+    });
   },
 
   delete: async ({ org, site, snapshotId }) => {
     const url = await getAemApiPath('snapshots', org, site, `/${snapshotId}`);
-    return daFetch({ url, opts: { method: 'DELETE' } });
+    return daFetch({ url, opts: { method: 'DELETE' }, org, site });
   },
 
-  addPath: async ({ org, site, snapshotId, path }) => {
+  addPath: async ({
+    org, site, snapshotId, path,
+  }) => {
     const normalized = normalizePath(path);
     if (Array.isArray(normalized) && normalized.length >= 2) {
       const url = await getAemApiPath('snapshots', org, site, `/${snapshotId}/*`);
-      return daFetch({ url, opts: jsonOpts('POST', { paths: normalized }) });
+      return daFetch({
+        url, opts: jsonOpts('POST', { paths: normalized }), org, site,
+      });
     }
     const single = Array.isArray(normalized) ? normalized[0] : normalized;
     const url = await getAemApiPath('snapshots', org, site, `/${snapshotId}${single}`);
-    return daFetch({ url, opts: { method: 'POST' } });
+    return daFetch({ url, opts: { method: 'POST' }, org, site });
   },
 
-  removePath: async ({ org, site, snapshotId, path }) => {
+  removePath: async ({
+    org, site, snapshotId, path,
+  }) => {
     const normalized = normalizePath(path);
     if (Array.isArray(normalized) && normalized.length >= 2) {
       const url = await getAemApiPath('snapshots', org, site, `/${snapshotId}/*`);
-      return daFetch({ url, opts: jsonOpts('POST', { paths: normalized, delete: true }) });
+      return daFetch({
+        url, opts: jsonOpts('POST', { paths: normalized, delete: true }), org, site,
+      });
     }
     const single = Array.isArray(normalized) ? normalized[0] : normalized;
     const url = await getAemApiPath('snapshots', org, site, `/${snapshotId}${single}`);
-    return daFetch({ url, opts: { method: 'DELETE' } });
+    return daFetch({ url, opts: { method: 'DELETE' }, org, site });
   },
 
   publish: async ({ org, site, snapshotId }) => {
     const url = new URL(await getAemApiPath('snapshots', org, site, `/${snapshotId}`));
     url.searchParams.set('publish', 'true');
-    return daFetch({ url: url.toString(), opts: { method: 'POST' } });
+    return daFetch({
+      url: url.toString(), opts: { method: 'POST' }, org, site,
+    });
   },
 
-  review: async ({ org, site, snapshotId, action }) => {
+  review: async ({
+    org, site, snapshotId, action,
+  }) => {
     const url = new URL(await getAemApiPath('snapshots', org, site, `/${snapshotId}`));
     url.searchParams.set('review', action);
-    return daFetch({ url: url.toString(), opts: { method: 'POST' } });
+    return daFetch({
+      url: url.toString(), opts: { method: 'POST' }, org, site,
+    });
   },
 };
 
@@ -209,7 +235,7 @@ export const source = {
     const finalUrl = cachebust
       ? `${url}${url.includes('?') ? '&' : '?'}nocache=${Date.now()}`
       : url;
-    return daFetch({ url: finalUrl });
+    return daFetch({ url: finalUrl, org, site });
   }),
 
   // Returns `{ ok, items, continuationToken, permissions }`. Pagination
@@ -228,12 +254,12 @@ export const source = {
       if (hlx6) {
         const slashed = path?.endsWith('/') ? path : `${path ?? ''}/`;
         const url = await getDaApiPath(SOURCE, org, site, slashed);
-        resp = await daFetch({ url, opts: fetchOpts });
+        resp = await daFetch({ url, opts: fetchOpts, org, site });
       }
     }
     if (!resp) {
       const url = await getDaApiPath(LIST, org, site, path);
-      resp = await daFetch({ url, opts: fetchOpts });
+      resp = await daFetch({ url, opts: fetchOpts, org, site });
     }
     const nextToken = resp?.headers?.get?.('da-continuation-token') || null;
     const { permissions } = resp || {};
@@ -254,23 +280,23 @@ export const source = {
     if (hlx6) {
       opts.body = body;
       if (ext) opts.headers = { 'Content-Type': TYPE_MAP[ext] };
-      return daFetch({ url, opts });
+      return daFetch({ url, opts, org, site });
     }
     const formData = new FormData();
     formData.append('data', new Blob([body], { type: TYPE_MAP[ext] }));
     opts.body = formData;
-    return daFetch({ url, opts });
+    return daFetch({ url, opts, org, site });
   }),
 
   // HEAD request — the value is in the response headers (doc-id, last-modified, etc.).
   getMetadata: withArgs(async ({ org, site, path }) => {
     const url = await getDaApiPath(SOURCE, org, site, path);
-    return daFetch({ url, opts: { method: 'HEAD' } });
+    return daFetch({ url, opts: { method: 'HEAD' }, org, site });
   }),
 
   delete: withArgs(async ({ org, site, path }) => {
     const url = await getDaApiPath(SOURCE, org, site, path);
-    return daFetch({ url, opts: { method: 'DELETE' } });
+    return daFetch({ url, opts: { method: 'DELETE' }, org, site });
   }),
 
   copy: withArgs(async ({
@@ -281,13 +307,15 @@ export const source = {
       const url = new URL(await getDaApiPath(SOURCE, org, site, destination));
       url.searchParams.set('source', path);
       if (collision) url.searchParams.set('collision', collision);
-      return daFetch({ url: url.toString(), opts: { method: 'PUT' } });
+      return daFetch({ url: url.toString(), opts: { method: 'PUT' }, org, site });
     }
     const formData = new FormData();
     formData.append('destination', destination);
     return daFetch({
       url: `${DA_ADMIN}/copy/${org}/${site}${path}`,
       opts: { method: 'POST', body: formData },
+      org,
+      site,
     });
   }),
 
@@ -300,24 +328,26 @@ export const source = {
       url.searchParams.set('source', path);
       url.searchParams.set('move', 'true');
       if (collision) url.searchParams.set('collision', collision);
-      return daFetch({ url: url.toString(), opts: { method: 'PUT' } });
+      return daFetch({ url: url.toString(), opts: { method: 'PUT' }, org, site });
     }
     const formData = new FormData();
     formData.append('destination', destination);
     return daFetch({
       url: `${DA_ADMIN}/move/${org}/${site}${path}`,
       opts: { method: 'POST', body: formData },
+      org,
+      site,
     });
   }),
 
   createFolder: withArgs(async ({ org, site, path }) => {
     const url = await getDaApiPath(SOURCE, org, site, `${path}/`);
-    return daFetch({ url, opts: { method: 'POST' } });
+    return daFetch({ url, opts: { method: 'POST' }, org, site });
   }),
 
   deleteFolder: withArgs(async ({ org, site, path }) => {
     const url = await getDaApiPath(SOURCE, org, site, `${path}/`);
-    return daFetch({ url, opts: { method: 'DELETE' } });
+    return daFetch({ url, opts: { method: 'DELETE' }, org, site });
   }),
 
   copyFolder: withArgs(async ({
@@ -330,13 +360,15 @@ export const source = {
       const url = new URL(await getDaApiPath(SOURCE, org, site, folderDestination));
       url.searchParams.set('source', folderPath);
       if (collision) url.searchParams.set('collision', collision);
-      return daFetch({ url: url.toString(), opts: { method: 'PUT' } });
+      return daFetch({ url: url.toString(), opts: { method: 'PUT' }, org, site });
     }
     const formData = new FormData();
     formData.append('destination', destination);
     return daFetch({
       url: `${DA_ADMIN}/copy/${org}/${site}${path}`,
       opts: { method: 'POST', body: formData },
+      org,
+      site,
     });
   }),
 };
@@ -345,7 +377,7 @@ export const source = {
 export const status = {
   get: withArgs(async ({ org, site, path }) => {
     const url = await getAemApiPath('status', org, site, path);
-    return daFetch({ url });
+    return daFetch({ url, org, site });
   }),
 };
 
@@ -354,24 +386,28 @@ export const versions = {
   list: withArgs(async ({ org, site, path }) => {
     const hlx6 = await isHlx6(org, site);
     if (hlx6) {
-      return daFetch({ url: `${AEM_API}/${org}/sites/${site}/source${path}/.versions` });
+      return daFetch({ url: `${AEM_API}/${org}/sites/${site}/source${path}/.versions`, org, site });
     }
     // Legacy DA uses a separate /versionlist endpoint for listing.
-    return daFetch({ url: `${DA_ADMIN}/versionlist/${org}/${site}${path}` });
+    return daFetch({ url: `${DA_ADMIN}/versionlist/${org}/${site}${path}`, org, site });
   }),
 
   // versionId on hlx6 is the ULID returned by versions.list; on legacy it is
   // the trailing `{versionGuid}/{fileGuid}.{ext}` segment from the list response.
-  get: withArgs(async ({ org, site, path, versionId }) => {
+  get: withArgs(async ({
+    org, site, path, versionId,
+  }) => {
     const hlx6 = await isHlx6(org, site);
     if (hlx6) {
       const url = `${AEM_API}/${org}/sites/${site}/source${path}/.versions/${versionId}`;
-      return daFetch({ url });
+      return daFetch({ url, org, site });
     }
-    return daFetch({ url: `${DA_ADMIN}/versionsource/${org}/${site}/${versionId}` });
+    return daFetch({ url: `${DA_ADMIN}/versionsource/${org}/${site}/${versionId}`, org, site });
   }),
 
-  create: withArgs(async ({ org, site, path, operation, comment }) => {
+  create: withArgs(async ({
+    org, site, path, operation, comment,
+  }) => {
     const hlx6 = await isHlx6(org, site);
     const url = await getDaApiPath(VERSIONS, org, site, path);
     const opts = { method: 'POST' };
@@ -380,11 +416,15 @@ export const versions = {
       const u = new URL(url);
       if (operation) u.searchParams.set('operation', operation);
       if (comment) u.searchParams.set('comment', comment);
-      return daFetch({ url: u.toString(), opts });
+      return daFetch({
+        url: u.toString(), opts, org, site,
+      });
     }
     // Legacy DA accepts a { label } JSON body. Map comment -> label.
     if (comment) opts.body = JSON.stringify({ label: comment });
-    return daFetch({ url, opts });
+    return daFetch({
+      url, opts, org, site,
+    });
   }),
 };
 
@@ -435,7 +475,9 @@ export const asText = (promise) => unwrap(promise, 'text');
 // Low-level fetch + upgrade probe
 // ============================================================================
 
-export const daFetch = async ({ url, opts = { method: 'GET' }, redirect = false }) => {
+export const daFetch = async ({
+  url, opts = { method: 'GET' }, redirect = false, org, site,
+}) => {
   const { accessToken } = await loadIms();
   if (!accessToken) {
     // The alt provider's handleSignIn() opens a popup, which needs a real user gesture behind
@@ -449,15 +491,29 @@ export const daFetch = async ({ url, opts = { method: 'GET' }, redirect = false 
   opts.headers = opts.headers || {};
 
   const canToken = ALLOWED_TOKEN.some((origin) => new URL(url).origin === origin);
-  if (canToken) {
-    opts.headers.Authorization = `Bearer ${accessToken.token}`;
+  const setBearer = (token) => {
+    opts.headers.Authorization = `Bearer ${token}`;
     if ([HLX_ADMIN, AEM_API].some((origin) => new URL(url).origin === origin)) {
-      opts.headers['x-content-source-authorization'] = `Bearer ${accessToken.token}`;
-      opts.headers.Authorization = `Bearer ${accessToken.token}`;
+      opts.headers['x-content-source-authorization'] = `Bearer ${token}`;
+    }
+  };
+  if (canToken) setBearer(accessToken.token);
+
+  let resp = await fetch(url, opts);
+
+  // The alt provider's account-level token (minted before any org/site was known — see
+  // helix-admin-ams's getTransientAccountTokenInfo) can't itself satisfy da-admin's per-site
+  // audience check, so every such request 401s until upgraded. IMS never hits this: its access
+  // token already works for any site, with authorization resolved separately, not audience-
+  // scoped. Upgrade via getAemSiteToken and retry once before treating this as a real failure.
+  if (resp.status === 401 && useAlt && org && site && canToken) {
+    const { siteToken } = await getAemSiteToken({ org, site });
+    if (siteToken && siteToken !== accessToken.token) {
+      setBearer(siteToken);
+      resp = await fetch(url, opts);
     }
   }
 
-  const resp = await fetch(url, opts);
   if (resp.status === 401 || resp.status === 403) {
     if (redirect) window.location = `${window.location.origin}/not-found`;
   }
@@ -484,11 +540,14 @@ export const daFetch = async ({ url, opts = { method: 'GET' }, redirect = false 
 export const isHlx6 = (() => {
   const cache = {};
 
-  const fetchUpgradeStatus = async (path) => {
+  const fetchUpgradeStatus = async (org, site) => {
+    const path = `/${org}/${site}`;
     const lsCache = JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? {};
     if (lsCache[path]) return true;
 
-    const resp = await daFetch({ url: `${HLX_ADMIN}/ping${path}` });
+    const resp = await daFetch({
+      url: `${HLX_ADMIN}/ping${path}`, org, site,
+    });
     const upgraded = resp.headers.get('x-api-upgrade-available') !== null;
     if (upgraded) {
       lsCache[path] = true;
@@ -501,7 +560,7 @@ export const isHlx6 = (() => {
     if (!site) return false;
 
     const path = `/${org}/${site}`;
-    cache[path] ??= fetchUpgradeStatus(path);
+    cache[path] ??= fetchUpgradeStatus(org, site);
     return cache[path];
   };
 })();
@@ -523,7 +582,12 @@ export const getAemSiteToken = (() => {
 
     const body = JSON.stringify({ org, site, accessToken: token });
     const opts = { method: 'POST', body, headers: { 'Content-Type': 'application/json' } };
-    const resp = await fetch(`${HLX_ADMIN}/auth/adobe/exchange`, opts);
+    // The alt provider's own token is itself the credential to present here — /auth/adobe/
+    // exchange is IMS-specific (detectTokenIDP/decodeImsToken) and would reject it outright.
+    // /auth/site/exchange is the idp-agnostic equivalent (see helix-admin-ams's
+    // exchangeTransientToken).
+    const exchangePath = useAlt ? '/auth/site/exchange' : '/auth/adobe/exchange';
+    const resp = await fetch(`${HLX_ADMIN}${exchangePath}`, opts);
     if (!resp.ok) return { error: `Error fetch AEM Site Token ${resp.status}` };
     return resp.json();
   };
@@ -657,11 +721,15 @@ async function callPath({
     const payload = { paths: path };
     if (includeDelete) payload.delete = true;
     if (forceUpdate) payload.forceUpdate = true;
-    return daFetch({ url, opts: jsonOpts('POST', payload) });
+    return daFetch({
+      url, opts: jsonOpts('POST', payload), org, site,
+    });
   }
   const single = Array.isArray(path) ? path[0] : path;
   const url = await getAemApiPath(api, org, site, single);
-  return daFetch({ url, opts: { method } });
+  return daFetch({
+    url, opts: { method }, org, site,
+  });
 }
 
 function toHlx6DaItem(parentPath, item) {
