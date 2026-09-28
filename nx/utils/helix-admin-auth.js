@@ -207,7 +207,16 @@ export const loadIms = (() => {
   let auth;
   const setup = () => Promise.resolve().then(() => {
     const stored = readStoredToken();
-    return stored ? { accessToken: { token: stored.token } } : { anonymous: true };
+    if (!stored) return { anonymous: true };
+    // The transient site token's only real profile data (see file header) — `sub` is the
+    // signed-in user's email (helix-admin-ams's getTransientSiteTokenInfo/
+    // getTransientAccountTokenInfo both set it as the subject). Decode failure (or no `sub`)
+    // falls back to no email rather than throwing, same as storeToken's own handling.
+    const payload = decodeJwtPayload(stored.token.replace(/^hlxtst_/, ''));
+    return {
+      accessToken: { token: stored.token },
+      ...(payload?.sub ? { email: payload.sub } : {}),
+    };
   });
   return () => {
     auth ??= setup();
