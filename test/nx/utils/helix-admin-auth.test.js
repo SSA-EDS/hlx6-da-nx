@@ -11,8 +11,8 @@ function b64url(obj) {
   return btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function makeSiteToken(exp, sub) {
-  return `hlxtst_header.${b64url({ exp, sub })}.sig`;
+function makeSiteToken(exp, sub, name) {
+  return `hlxtst_header.${b64url({ exp, sub, ...(name ? { name } : {}) })}.sig`;
 }
 
 function storeRawToken(token, exp) {
@@ -59,6 +59,22 @@ describe('helix-admin-auth', () => {
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       const result = await fresh.loadIms();
       expect(result.email).to.equal('user@example.com');
+    });
+
+    it('surfaces the token payload\'s name claim when present', async () => {
+      const futureExp = Math.floor(Date.now() / 1000) + 3600;
+      storeRawToken(makeSiteToken(futureExp, 'user@example.com', 'Test User'), futureExp);
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const result = await fresh.loadIms();
+      expect(result.name).to.equal('Test User');
+    });
+
+    it('omits name when the token payload has none', async () => {
+      const futureExp = Math.floor(Date.now() / 1000) + 3600;
+      storeRawToken(makeSiteToken(futureExp, 'user@example.com'), futureExp);
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const result = await fresh.loadIms();
+      expect(result.name).to.equal(undefined);
     });
 
     it('treats an expired stored token as anonymous and clears it', async () => {
