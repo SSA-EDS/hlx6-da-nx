@@ -52,6 +52,7 @@ class NxProfile extends LitElement {
     _avatar: { state: true },
     _openOrgs: { state: true },
     _orgs: { state: true },
+    _useAlt: { state: true },
   };
 
   async connectedCallback() {
@@ -67,6 +68,7 @@ class NxProfile extends LitElement {
     // the alt provider's popup).
     const { useAlt, authModule } = await resolveAuthProvider();
     this._authModule = authModule;
+    this._useAlt = useAlt;
     try {
       this._ims = await authModule.loadIms(this.loginPopup);
     } catch {
@@ -155,6 +157,15 @@ class NxProfile extends LitElement {
     return this._orgs?.find((org) => org.userId === this._ims.userId);
   }
 
+  // The alt provider has no photo to show (see loadIms above) — initials are a real signal
+  // derived from what we do have, rather than a placeholder image implying a photo exists.
+  get _initials() {
+    const source = this._ims?.displayName || this._ims?.email || '';
+    const words = source.trim().split(/\s+/).filter(Boolean);
+    if (words.length > 1) return (words[0][0] + words[1][0]).toUpperCase();
+    return source.slice(0, 2).toUpperCase();
+  }
+
   get _notice() {
     return this.shadowRoot.querySelector('.nx-menu-clipboard-notice');
   }
@@ -199,15 +210,17 @@ class NxProfile extends LitElement {
     return html`
       <div class="nx-profile">
         <button id="profile-btn" class="nx-btn-profile" aria-label="Open profile menu" popovertarget="nx-menu-profile">
-          <img src="${this._avatar}" alt="" />
+          ${this._useAlt
+            ? html`<span class="nx-avatar-initials">${this._initials}</span>`
+            : html`<img src="${this._avatar}" alt="" />`}
         </button>
         <div id="nx-menu-profile" popover>
           <div class="nx-menu-details-wrapper">
             <p class="nx-menu-clipboard-notice">User ID copied to clipboard.</p>
             <button class="nx-menu-btn nx-menu-btn-details" @click=${this.handleCopyUser}>
-              <picture>
-                <img src="${this._avatar}" alt="Profile photo" />
-              </picture>
+              ${this._useAlt
+                ? html`<span class="nx-avatar-initials nx-avatar-initials-lg">${this._initials}</span>`
+                : html`<picture><img src="${this._avatar}" alt="Profile photo" /></picture>`}
               <div class="nx-menu-details-name">
                 <p class="nx-display-name">${this._ims.displayName}</p>
                 <p class="nx-email">${this._ims.email}</p>
@@ -220,9 +233,9 @@ class NxProfile extends LitElement {
           <div class="nx-menu-links">
             <p class="nx-menu-link-title">Links</p>
             <ul>
-              <li><a href="https://account.adobe.com/" target="_blank">Account</a></li>
-              <li><a href="https://experience.adobe.com/#/preferences" target="_blank">Preferences</a></li>
-              <li><a href="https://adminconsole.adobe.com" target="_blank">Admin Console</a></li>
+              ${!this._useAlt ? html`<li><a href="https://account.adobe.com/" target="_blank">Account</a></li>` : nothing}
+              ${!this._useAlt ? html`<li><a href="https://experience.adobe.com/#/preferences" target="_blank">Preferences</a></li>` : nothing}
+              ${!this._useAlt ? html`<li><a href="https://adminconsole.adobe.com" target="_blank">Admin Console</a></li>` : nothing}
               <li><button class="nx-menu-link-btn" @click=${this.handleLegalNotices}>Legal notices</button></li>
             </ul>
           </div>

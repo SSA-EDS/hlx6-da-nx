@@ -61,20 +61,20 @@ describe('helix-admin-auth', () => {
       expect(result.email).to.equal('user@example.com');
     });
 
-    it('surfaces the token payload\'s name claim when present', async () => {
+    it('surfaces the token payload\'s name claim as displayName when present', async () => {
       const futureExp = Math.floor(Date.now() / 1000) + 3600;
       storeRawToken(makeSiteToken(futureExp, 'user@example.com', 'Test User'), futureExp);
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       const result = await fresh.loadIms();
-      expect(result.name).to.equal('Test User');
+      expect(result.displayName).to.equal('Test User');
     });
 
-    it('omits name when the token payload has none', async () => {
+    it('omits displayName when the token payload has no name claim', async () => {
       const futureExp = Math.floor(Date.now() / 1000) + 3600;
       storeRawToken(makeSiteToken(futureExp, 'user@example.com'), futureExp);
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       const result = await fresh.loadIms();
-      expect(result.name).to.equal(undefined);
+      expect(result.displayName).to.equal(undefined);
     });
 
     it('treats an expired stored token as anonymous and clears it', async () => {
