@@ -211,14 +211,16 @@ export const loadIms = (() => {
     // The transient site token's only real profile data (see file header) — `sub` is the
     // signed-in user's email (helix-admin-ams's getTransientSiteTokenInfo/
     // getTransientAccountTokenInfo both set it as the subject), and `name` (when present) is
-    // threaded through from whatever the idp's own id_token provided at sign-in time. Decode
-    // failure (or missing fields) falls back to omitting them rather than throwing, same as
-    // storeToken's own handling.
+    // threaded through from whatever the idp's own id_token provided at sign-in time. Surfaced
+    // as `displayName`, not `name` — matches nx2/blocks/profile/profile.js's existing IMS
+    // contract (`this._ims.displayName`), so that component doesn't need a second field name
+    // for the same concept. Decode failure (or missing fields) falls back to omitting them
+    // rather than throwing, same as storeToken's own handling.
     const payload = decodeJwtPayload(stored.token.replace(/^hlxtst_/, ''));
     return {
       accessToken: { token: stored.token },
       ...(payload?.sub ? { email: payload.sub } : {}),
-      ...(payload?.name ? { name: payload.name } : {}),
+      ...(payload?.name ? { displayName: payload.name } : {}),
     };
   });
   return () => {

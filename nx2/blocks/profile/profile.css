@@ -47,6 +47,20 @@
   pointer-events: none;
 }
 
+.nx-avatar-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--s2-gray-200, #e1e1e1);
+  color: var(--s2-gray-800, #2c2c2c);
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
 #nx-menu-profile {
   position: fixed;
   position-anchor: --my-anchor;
@@ -131,6 +145,13 @@
   display: block;
   width: 75px;
   height: 75px;
+}
+
+.nx-avatar-initials-lg {
+  width: 75px;
+  height: 75px;
+  border-radius: 38px;
+  font-size: 24px;
 }
 
 .nx-menu-details-name {
