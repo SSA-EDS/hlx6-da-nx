@@ -39,10 +39,10 @@ export const daFetch = async (url, opts = {}) => {
   if (resp.status === 401) {
     const { useAlt, authModule } = await resolveAuthProvider();
     if (useAlt) {
-      // The alternate provider's handleSignIn() opens a popup, which needs a real user
-      // gesture behind it — this reactive, post-fetch continuation never has one (unlike
-      // ims.js's handleSignIn() below, a gesture-free top-level redirect in the common
-      // case). Clear the now-invalid session instead; the next real sign-in prompt (e.g.
+      // The alternate provider's handleSignIn() opens an embedded sign-in widget, which still
+      // needs a real user gesture behind it — this reactive, post-fetch continuation never has
+      // one (unlike ims.js's handleSignIn() below, a gesture-free top-level redirect in the
+      // common case). Clear the now-invalid session instead; the next real sign-in prompt (e.g.
       // nx/utils/signin.js's gate, which does require a click) picks it up correctly.
       authModule?.handleSignOut();
     } else if (authModule) {

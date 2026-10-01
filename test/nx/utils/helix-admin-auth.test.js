@@ -232,249 +232,138 @@ describe('helix-admin-auth', () => {
   });
 
   describe('handleSignIn', () => {
-    function makePopupStub() {
-      return { location: '', closed: false, close: sinon.stub() };
+    const WIDGET_CONFIG = { issuer: `${new URL(HLX_ADMIN).origin.replace('admin', 'aemgovus-stub')}/oauth2/aus123`, clientId: 'widget-client-id' };
+    let origLoadWidget;
+
+    beforeEach(() => {
+      origLoadWidget = testHooks.loadWidget;
+    });
+
+    afterEach(() => {
+      testHooks.loadWidget = origLoadWidget;
+      document.querySelectorAll('dialog.da-helix-admin-auth-widget-dialog').forEach((d) => d.remove());
+    });
+
+    function makeFetchStub({ config = WIDGET_CONFIG, exchangeOk = true, siteToken = 'hlxtst_abc' } = {}) {
+      return async (url) => {
+        const u = url.toString();
+        if (u === `${HLX_ADMIN}/auth/access-manager/config`) {
+          return config
+            ? { ok: true, json: async () => config }
+            : { ok: false };
+        }
+        if (u === `${HLX_ADMIN}/auth/access-manager/exchange`) {
+          return exchangeOk
+            ? { ok: true, json: async () => ({ siteToken }) }
+            : { ok: false };
+        }
+        throw new Error(`unexpected fetch: ${u}`);
+      };
     }
 
-    it('opens the popup synchronously, before any fetch resolves', () => {
-      const popup = makePopupStub();
-      const openStub = sinon.stub().returns(popup);
-      window.open = openStub;
-      window.fetch = sinon.stub().returns(new Promise(() => {})); // never resolves
+    function stubWidget({ tokens = { idToken: { idToken: 'raw-id-token' } } } = {}) {
+      const instance = {
+        showSignInToGetTokens: sinon.stub().resolves(tokens),
+        remove: sinon.stub(),
+      };
+      const OktaSignInStub = sinon.stub().returns(instance);
+      testHooks.loadWidget = async () => ({ default: OktaSignInStub });
+      return { OktaSignInStub, instance };
+    }
 
-      handleSignIn();
+    it('does nothing if the widget config endpoint is unavailable', async () => {
+      window.fetch = makeFetchStub({ config: null });
+      const { OktaSignInStub } = stubWidget();
 
-      expect(openStub.calledOnce).to.equal(true);
-      expect(openStub.firstCall.args[0]).to.equal('');
+      await handleSignIn();
+
+      expect(OktaSignInStub.called).to.equal(false);
+      expect(document.querySelector('dialog.da-helix-admin-auth-widget-dialog')).to.equal(null);
     });
 
-    it('does nothing further if the popup was blocked', async () => {
-      window.open = sinon.stub().returns(null);
-      const fetchStub = sinon.stub();
-      window.fetch = fetchStub;
+    it('initializes the widget with the discovered issuer/client_id and the interaction code flow', async () => {
+      window.fetch = makeFetchStub();
+      const { OktaSignInStub } = stubWidget();
+      sinon.stub(testHooks, 'reload');
 
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
+      try {
+        await handleSignIn();
 
-      expect(fetchStub.called).to.equal(false);
+        expect(OktaSignInStub.calledOnce).to.equal(true);
+        const config = OktaSignInStub.firstCall.args[0];
+        expect(config.clientId).to.equal(WIDGET_CONFIG.clientId);
+        expect(config.authParams.issuer).to.equal(WIDGET_CONFIG.issuer);
+        expect(config.baseUrl).to.equal(new URL(WIDGET_CONFIG.issuer).origin);
+        expect(config.useInteractionCodeFlow).to.equal(true);
+      } finally {
+        testHooks.reload.restore();
+      }
     });
 
-    it('discovers the login url and navigates the popup with client_id/redirect_uri/response_mode=popup', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
-      });
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      const url = new URL(popup.location);
-      const expected = new URL(`${HLX_ADMIN}/auth/access-manager`);
-      expect(`${url.origin}${url.pathname}`).to.equal(`${expected.origin}${expected.pathname}`);
-      expect(url.searchParams.get('client_id')).to.equal('da-live');
-      expect(url.searchParams.get('response_mode')).to.equal('popup');
-      expect(url.searchParams.get('redirect_uri')).to.equal(`${window.location.origin}/.da/login/ack`);
-    });
-
-    it('never hardcodes a provider name — follows whichever single login_ link comes back', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        json: async () => ({ links: { login_google: `${HLX_ADMIN}/auth/google` } }),
-      });
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      const url = new URL(popup.location);
-      const expected = new URL(`${HLX_ADMIN}/auth/google`);
-      expect(`${url.origin}${url.pathname}`).to.equal(`${expected.origin}${expected.pathname}`);
-    });
-
-    it('ignores the _sa (select-account) link variant when picking a provider', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        json: async () => ({
-          links: {
-            'login_access-manager_sa': `${HLX_ADMIN}/auth/access-manager?select_account=true`,
-            'login_access-manager': `${HLX_ADMIN}/auth/access-manager`,
-          },
-        }),
-      });
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      expect(popup.location).to.include('/auth/access-manager');
-      expect(popup.location).to.not.include('select_account');
-    });
-
-    it('closes the popup if discovery fails (e.g. no idp configured)', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({ ok: false });
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      expect(popup.close.calledOnce).to.equal(true);
-    });
-
-    it('closes the popup if the discovery fetch itself throws', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().rejects(new Error('network down'));
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      expect(popup.close.calledOnce).to.equal(true);
-    });
-
-    it('closes the popup rather than navigating it to a non-https login URL', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        // eslint-disable-next-line no-script-url -- asserting this exact string is rejected
-        json: async () => ({ links: { 'login_access-manager': 'javascript:alert(1)' } }),
-      });
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      expect(popup.close.calledOnce).to.equal(true);
-      expect(popup.location).to.equal('');
-    });
-
-    it('closes the popup rather than navigating it to a cross-origin login URL, even over https', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        json: async () => ({ links: { 'login_access-manager': 'https://evil.example/phish' } }),
-      });
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      expect(popup.close.calledOnce).to.equal(true);
-      expect(popup.location).to.equal('');
-    });
-
-    it('stores the token and reloads on a valid postMessage from the popup', async () => {
-      // A real window, not the plain-object stub: MessageEvent's `source` field only
-      // accepts an actual Window/MessagePort/ServiceWorker (confirmed empirically — even a
-      // bare EventTarget is rejected), and this test needs event.source === popup to hold
-      // for the message to be accepted at all.
-      const popup = window.open('', '_blank');
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
-      });
+    it('exchanges the widget-obtained id_token, stores the resulting site token, and reloads', async () => {
+      const siteToken = makeSiteToken(Math.floor(Date.now() / 1000) + 3600);
+      window.fetch = makeFetchStub({ siteToken });
+      stubWidget();
       const reloadStub = sinon.stub(testHooks, 'reload');
 
       try {
-        handleSignIn();
-        await new Promise((resolve) => { setTimeout(resolve, 0); });
+        await handleSignIn();
 
-        const token = makeSiteToken(Math.floor(Date.now() / 1000) + 3600);
-        window.dispatchEvent(new MessageEvent('message', {
-          origin: new URL(HLX_ADMIN).origin,
-          source: popup,
-          data: { siteToken: token },
-        }));
-        await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-        expect(reloadStub.calledOnce).to.equal(true);
         const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        expect(stored.token).to.equal(token);
-        // Consumers like da-live's getAuthToken() gate on this shared flag before ever
-        // calling loadIms() — without it, a signed-in alt-provider session was invisible to
-        // them. ims.js sets the same key on its own sign-in.
-        expect(localStorage.getItem('nx-ims')).to.equal('true');
+        expect(stored.token).to.equal(siteToken);
+        expect(reloadStub.calledOnce).to.equal(true);
       } finally {
-        popup.close();
+        reloadStub.restore();
       }
     });
 
-    it('ignores a postMessage from the wrong origin', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
-      });
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      // source only needs to be a real, constructor-valid EventTarget here (Window/
-      // MessagePort) — the origin check short-circuits before source is ever compared, so
-      // it doesn't need to be popup itself. See the "stores the token" test for that case.
-      window.dispatchEvent(new MessageEvent('message', {
-        origin: 'https://evil.example.com',
-        source: window,
-        data: { siteToken: makeSiteToken(Math.floor(Date.now() / 1000) + 3600) },
-      }));
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
-    });
-
-    it('ignores a postMessage from a source other than the opened popup', async () => {
-      const popup = makePopupStub();
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
-      });
-
-      handleSignIn();
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      window.dispatchEvent(new MessageEvent('message', {
-        origin: new URL(HLX_ADMIN).origin,
-        source: window,
-        data: { siteToken: makeSiteToken(Math.floor(Date.now() / 1000) + 3600) },
-      }));
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
-    });
-
-    it('closes the popup on a correctly-originated message that carries no siteToken', async () => {
-      // A real window, same reason as the "stores the token" test above: event.source must
-      // be the actual popup for the message to be accepted at all.
-      const popup = window.open('', '_blank');
-      window.open = sinon.stub().returns(popup);
-      window.fetch = sinon.stub().resolves({
-        ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
-      });
-      const closeSpy = sinon.spy(popup, 'close');
+    it('removes the widget and the dialog once signed in', async () => {
+      window.fetch = makeFetchStub();
+      const { instance } = stubWidget();
+      sinon.stub(testHooks, 'reload');
 
       try {
-        handleSignIn();
-        await new Promise((resolve) => { setTimeout(resolve, 0); });
+        await handleSignIn();
 
-        window.dispatchEvent(new MessageEvent('message', {
-          origin: new URL(HLX_ADMIN).origin,
-          source: popup,
-          data: { error: 'access_denied' },
-        }));
-        await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-        expect(closeSpy.calledOnce).to.equal(true);
+        expect(instance.remove.calledOnce).to.equal(true);
+        expect(document.querySelector('dialog.da-helix-admin-auth-widget-dialog')).to.equal(null);
       } finally {
-        if (!popup.closed) popup.close();
+        testHooks.reload.restore();
       }
+    });
+
+    it('cleans up without storing a token when the widget resolves no id_token', async () => {
+      window.fetch = makeFetchStub();
+      const { instance } = stubWidget({ tokens: {} });
+
+      await handleSignIn();
+
+      expect(instance.remove.calledOnce).to.equal(true);
+      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+    });
+
+    it('cleans up without storing a token when the exchange endpoint fails', async () => {
+      window.fetch = makeFetchStub({ exchangeOk: false });
+      const { instance } = stubWidget();
+
+      await handleSignIn();
+
+      expect(instance.remove.calledOnce).to.equal(true);
+      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+    });
+
+    it('cleans up if the widget itself throws', async () => {
+      window.fetch = makeFetchStub();
+      const instance = {
+        showSignInToGetTokens: sinon.stub().rejects(new Error('widget blew up')),
+        remove: sinon.stub(),
+      };
+      testHooks.loadWidget = async () => ({ default: sinon.stub().returns(instance) });
+
+      await handleSignIn();
+
+      expect(instance.remove.calledOnce).to.equal(true);
+      expect(document.querySelector('dialog.da-helix-admin-auth-widget-dialog')).to.equal(null);
     });
   });
 });

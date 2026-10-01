@@ -2,10 +2,10 @@ import * as altAuth from './helix-admin-auth.js';
 
 // IMS's handleSignIn() is a top-level redirect (window.adobeIMS.signIn()), which needs no
 // user gesture — safe to fire automatically below. The alternate provider's handleSignIn()
-// opens a popup, which every browser blocks unless called from inside a real click; calling
-// it automatically here (as this function used to, unconditionally) means it silently no-ops
-// and the page stays hidden forever. Named window ('da-helix-admin-auth', set in
-// helix-admin-auth.js) means repeat clicks refocus the same popup rather than opening more.
+// opens an embedded sign-in widget inside a <dialog>, which still needs a real click behind
+// it (dialog.showModal() itself doesn't require one, but calling this automatically here, as
+// this function used to, read as the page silently hijacking focus into a sign-in form with
+// no user action at all) — render a plain prompt button instead and defer to its click.
 function renderSignInPrompt(onSignIn) {
   document.body.style.removeProperty('display');
   document.body.innerHTML = '';
