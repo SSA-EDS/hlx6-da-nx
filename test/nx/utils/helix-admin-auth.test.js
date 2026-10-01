@@ -232,7 +232,11 @@ describe('helix-admin-auth', () => {
   });
 
   describe('handleSignIn', () => {
-    const WIDGET_CONFIG = { issuer: `${new URL(HLX_ADMIN).origin.replace('admin', 'aemgovus-stub')}/oauth2/aus123`, clientId: 'widget-client-id' };
+    const WIDGET_CONFIG = {
+      issuer: `${new URL(HLX_ADMIN).origin.replace('admin', 'aemgovus-stub')}/oauth2/aus123`,
+      clientId: 'widget-client-id',
+      redirectUri: `${HLX_ADMIN}/auth/access-manager/ack`,
+    };
     let origLoadWidget;
 
     beforeEach(() => {
@@ -294,6 +298,9 @@ describe('helix-admin-auth', () => {
         expect(config.clientId).to.equal(WIDGET_CONFIG.clientId);
         expect(config.authParams.issuer).to.equal(WIDGET_CONFIG.issuer);
         expect(config.baseUrl).to.equal(new URL(WIDGET_CONFIG.issuer).origin);
+        // Must be the backend-provided value (its own registered redirect URI), never derived
+        // from window.location — the widget never navigates here, but Okta still validates it.
+        expect(config.redirectUri).to.equal(WIDGET_CONFIG.redirectUri);
         expect(config.useInteractionCodeFlow).to.equal(true);
         // The /oie export's real constructor throws unless this is exactly false (confirmed
         // against the vendored widget directly, not just asserted here) — the stubbed widget
