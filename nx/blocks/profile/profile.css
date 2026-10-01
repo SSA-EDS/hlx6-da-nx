@@ -68,8 +68,8 @@ p {
   width: 24px;
   height: 24px;
   border-radius: 12px;
-  background: var(--s2-gray-200, #e1e1e1);
-  color: var(--s2-gray-800, #2c2c2c);
+  background: var(--s2-blue-900);
+  color: #fff;
   font-size: 10px;
   font-weight: 700;
   pointer-events: none;
