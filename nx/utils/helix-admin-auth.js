@@ -235,6 +235,9 @@ async function openSignInWidget() {
       clientId: config.clientId,
       redirectUri: window.location.origin,
       useInteractionCodeFlow: true,
+      // The /oie export's constructor throws unless this is explicitly false — undefined
+      // isn't good enough, it only ever checks for the exact opposite value (true).
+      useClassicEngine: false,
       authParams: {
         issuer: config.issuer,
         scopes: ['openid', 'profile', 'email'],

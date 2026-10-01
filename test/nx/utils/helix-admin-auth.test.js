@@ -295,6 +295,11 @@ describe('helix-admin-auth', () => {
         expect(config.authParams.issuer).to.equal(WIDGET_CONFIG.issuer);
         expect(config.baseUrl).to.equal(new URL(WIDGET_CONFIG.issuer).origin);
         expect(config.useInteractionCodeFlow).to.equal(true);
+        // The /oie export's real constructor throws unless this is exactly false (confirmed
+        // against the vendored widget directly, not just asserted here) — the stubbed widget
+        // in this test doesn't enforce that itself, so this only guards the value we pass,
+        // not the real widget's validation.
+        expect(config.useClassicEngine).to.equal(false);
       } finally {
         testHooks.reload.restore();
       }
