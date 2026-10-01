@@ -132,6 +132,19 @@ describe('helix-admin-auth', () => {
       await fresh.isAvailable();
       expect(fetchStub.callCount).to.equal(1);
     });
+
+    it('retries once on a transient discovery failure instead of memoizing it', async () => {
+      const fetchStub = sinon.stub();
+      fetchStub.onFirstCall().rejects(new Error('network down'));
+      fetchStub.onSecondCall().resolves({
+        ok: true,
+        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      });
+      window.fetch = fetchStub;
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      expect(await fresh.isAvailable()).to.equal(true);
+      expect(fetchStub.callCount).to.equal(2);
+    });
   });
 
   describe('resolveAuthProvider', () => {
@@ -191,12 +204,19 @@ describe('helix-admin-auth', () => {
   });
 
   describe('handleSignOut', () => {
-    it('clears the stored token and the shared nx-ims flag', () => {
+    it('clears the stored token and the shared nx-ims flag, then reloads', () => {
       storeRawToken('hlxtst_abc.def.ghi', Math.floor(Date.now() / 1000) + 3600);
       localStorage.setItem('nx-ims', true);
-      handleSignOut();
-      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
-      expect(localStorage.getItem('nx-ims')).to.equal(null);
+      const reloadStub = sinon.stub(testHooks, 'reload');
+
+      try {
+        handleSignOut();
+        expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+        expect(localStorage.getItem('nx-ims')).to.equal(null);
+        expect(reloadStub.calledOnce).to.equal(true);
+      } finally {
+        reloadStub.restore();
+      }
     });
   });
 

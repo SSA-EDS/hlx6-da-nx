@@ -92,9 +92,14 @@ function storeToken(siteToken) {
   localStorage.setItem('nx-ims', true);
 }
 
+// Real IMS's handleSignOut (ims.js) redirects the whole page to IMS's own logout flow, which
+// naturally refreshes every bit of UI reading auth state — this provider has no equivalent
+// navigation, so nothing would otherwise prompt nx-profile (or anything else) to notice the
+// session is gone until an unrelated reload happened to occur.
 export function handleSignOut() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem('nx-ims');
+  reload();
 }
 
 // Provider-agnostic on purpose — nx-ims is the shared flag (see readStoredToken above), so
@@ -128,8 +133,15 @@ async function discoverLoginUrl() {
 // (the common case today) has to fall back to ims.js cleanly, not break on a network hiccup.
 export const isAvailable = (() => {
   let available;
+  // One retry before caching a negative result — discoverLoginUrl() is a single network
+  // round trip with no retry of its own, so a transient failure (slow/cold backend, one
+  // dropped request) would otherwise be memoized as "no alt provider" for the rest of the
+  // page's life, silently falling back to real IMS for reasons that have nothing to do with
+  // whether the deployment actually has an alt provider configured.
   return () => {
-    available ??= discoverLoginUrl().then((url) => !!url).catch(() => false);
+    available ??= discoverLoginUrl().then((url) => !!url).catch(
+      () => discoverLoginUrl().then((url) => !!url).catch(() => false),
+    );
     return available;
   };
 })();
