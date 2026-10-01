@@ -9,6 +9,11 @@ import { resolveAuthProvider } from '../../utils/helix-admin-auth.js';
 const { nxBase } = getConfig();
 const style = await getStyle(import.meta.url);
 
+// Well-known, hardcoded path (not configurable) — same content nx2's profile.js links to.
+// Account/Preferences/Admin Console are hidden for the alt provider (see render below), so
+// this is what keeps the Links section from rendering empty for those users.
+const LEGAL_NOTICES_PATH = '/fragments/nav/help';
+
 const ICONS = [
   `${nxBase}/img/icons/S2IconShare20N-icon.svg`,
   `${nxBase}/img/icons/S2IconSwitch20N-icon.svg`,
@@ -204,6 +209,7 @@ class NxProfile extends LitElement {
               ${!this._useAlt ? html`<li><a href="https://account.adobe.com/" target="_blank">Account</a></li>` : nothing}
               ${!this._useAlt ? html`<li><a href="https://experience.adobe.com/#/preferences" target="_blank">Preferences</a></li>` : nothing}
               ${!this._useAlt ? html`<li><a href="https://adminconsole.adobe.com" target="_blank">Admin Console</a></li>` : nothing}
+              <li><a href="${LEGAL_NOTICES_PATH}" target="_blank">Legal notices</a></li>
             </ul>
           </div>
           <button class="nx-menu-btn nx-menu-btn-signout" @click=${this.handleSignOut}>Sign out</button>
