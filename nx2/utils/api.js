@@ -506,11 +506,17 @@ export const daFetch = async ({
   // audience check, so every such request 401s until upgraded. IMS never hits this: its access
   // token already works for any site, with authorization resolved separately, not audience-
   // scoped. Upgrade via getAemSiteToken and retry once before treating this as a real failure.
-  if (resp.status === 401 && useAlt && org && site && canToken) {
-    const { siteToken } = await getAemSiteToken({ org, site });
-    if (siteToken && siteToken !== accessToken.token) {
-      setBearer(siteToken);
-      resp = await fetch(url, opts);
+  // Most call sites never pass org/site explicitly — they're derived from the URL itself
+  // (every ALLOWED_TOKEN endpoint follows the same /{verb}/{org}/{site}/... shape) so this
+  // upgrade isn't silently skipped just because a caller didn't thread them through.
+  if (resp.status === 401 && useAlt && canToken) {
+    const resolved = org && site ? { org, site } : fromPath(new URL(url).pathname.replace(/^\/[^/]+/, ''));
+    if (resolved.org && resolved.site) {
+      const { siteToken } = await getAemSiteToken(resolved);
+      if (siteToken && siteToken !== accessToken.token) {
+        setBearer(siteToken);
+        resp = await fetch(url, opts);
+      }
     }
   }
 
