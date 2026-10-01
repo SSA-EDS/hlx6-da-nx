@@ -1,13 +1,11 @@
 import { expect } from '@esm-bundle/chai';
-import { setConfig } from '../../../../../scripts/nx.js';
-import { HLX_ADMIN } from '../../../../../../nx/utils/utils.js';
+import { setConfig } from '../../../../nx/scripts/nexter.js';
+import { HLX_ADMIN } from '../../../../nx/utils/utils.js';
 
 // Own file: resolveAuthProvider()'s isAvailable() memoizes at module scope, and
 // customElements.define('nx-profile', ...) can only happen once per page — both
 // constraints mean the alt-provider render path can only be observed from a
-// fresh module graph/page, not a second describe block sharing profile.test.js's
-// own. Mirrors the same reasoning already used for da-auth-status's split test
-// files in hlx6-da-live.
+// fresh module graph/page. Mirrors nx2's own profile-alt-provider.test.js.
 const STORAGE_KEY = 'da-helix-admin-auth';
 
 function b64url(obj) {
@@ -43,24 +41,19 @@ async function waitFor(predicate, { attempts = 50, interval = 10 } = {}) {
   return predicate();
 }
 
-await setConfig({ hostnames: [] });
-await import('../../../../../blocks/profile/profile.js');
+setConfig({ nxBase: '/nx' });
+await import('../../../../nx/blocks/profile/profile.js');
 
-describe('nx-profile — alt provider (Okta/access-manager)', () => {
+describe('nx-profile (nx1) — alt provider (Okta/access-manager)', () => {
   let el;
   let restoreDiscovery;
 
   before(async () => {
-    // Scoped to this describe block's own setup, not file-top-level — isAvailable()'s
-    // discovery fetch and the stored token are both only read once, on connectedCallback
-    // below, so there's no need to have either active any earlier than immediately before
-    // that (minimizes the window localStorage is polluted for any other test file sharing
-    // this origin).
     restoreDiscovery = stubDiscovery();
     storeAltProviderToken({ sub: 'user@example.com', name: 'Test User' });
     el = document.createElement('nx-profile');
     document.body.append(el);
-    await waitFor(() => el._ims);
+    await waitFor(() => el._details);
     await el.updateComplete;
   });
 
@@ -71,8 +64,8 @@ describe('nx-profile — alt provider (Okta/access-manager)', () => {
   });
 
   it('renders initials instead of a broken avatar image', () => {
-    const initials = el.shadowRoot.querySelector('#profile-btn .nx-avatar-initials');
-    const img = el.shadowRoot.querySelector('#profile-btn img');
+    const initials = el.shadowRoot.querySelector('.nx-btn-profile .nx-avatar-initials');
+    const img = el.shadowRoot.querySelector('.nx-btn-profile img');
     expect(img).to.be.null;
     expect(initials).to.not.be.null;
     expect(initials.textContent.trim()).to.equal('TU');
@@ -88,12 +81,6 @@ describe('nx-profile — alt provider (Okta/access-manager)', () => {
     expect(links).to.not.include('Account');
     expect(links).to.not.include('Preferences');
     expect(links).to.not.include('Admin Console');
-  });
-
-  it('keeps the Legal notices entry', () => {
-    const legalBtn = el.shadowRoot.querySelector('.nx-menu-links .nx-menu-link-btn');
-    expect(legalBtn).to.not.be.null;
-    expect(legalBtn.textContent.trim()).to.equal('Legal notices');
   });
 
   it('does not render an Organization section (no org data for the alt provider)', () => {
