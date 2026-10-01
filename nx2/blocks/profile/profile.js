@@ -105,7 +105,10 @@ class NxProfile extends LitElement {
 
   handleCopyUser() {
     try {
-      const blob = new Blob([this._ims.userId], { type: 'text/plain' });
+      // The alt provider has no adobe.io userId (see loadIms above) — email is the closest
+      // thing it has to a stable identifier, rather than copying the literal string "undefined".
+      const id = this._ims.userId || this._ims.email;
+      const blob = new Blob([id], { type: 'text/plain' });
       const data = [new ClipboardItem({ [blob.type]: blob })];
       navigator.clipboard.write(data);
       this._notice.classList.toggle('is-visible');
