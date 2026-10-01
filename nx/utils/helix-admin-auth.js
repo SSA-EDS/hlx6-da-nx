@@ -26,23 +26,28 @@
 // stub getOrgs()/getIo() methods that return placeholder data — leaving them absent means a
 // caller fails loudly instead of rendering fake-looking org/profile info.
 //
-// Always popup, never a top-level redirect: DA is a static site with no server-side endpoint
-// to receive the POST helix-admin's redirect flavor expects, in either iframe or top-level
-// context. The popup delivers its result via postMessage instead (see handleSignIn).
+// Embedded inline (Okta Sign-In Widget, Interaction Code flow), not a popup window or a
+// top-level redirect: a popup can get silently orphaned/lost if the user navigates the main
+// tab away before finishing, and this is a static site with no server-side endpoint to receive
+// the POST a top-level redirect flavor expects. The widget authenticates directly against Okta
+// from right inside the page (see openSignInWidget), handing back tokens with no navigation at
+// all. See auth-migration/ for the Okta-side (Interaction Code grant + CORS) prerequisites this
+// depends on.
 
 import { HLX_ADMIN } from './utils.js';
 
 const STORAGE_KEY = 'da-helix-admin-auth';
-// Origin-validation only, matching helix-admin's CLIENTS['da-live'].isValidRedirectUri — no
-// page is ever served at this path. Ties sign-in to the exact origin serving this script, so
-// it only works on domains helix-admin has registered (production), not branch previews.
-const REDIRECT_URI = `${window.location.origin}/.da/login/ack`;
-const POPUP_CLOSED_POLL_MS = 500;
 
 // window.location.reload is a non-configurable, non-writable own property in real browsers
 // (confirmed empirically, not an assumption) — tests can't stub or reassign it directly.
 // Indirecting through a plain, mutable object gives tests a seam without changing behavior.
-export const testHooks = { reload: () => window.location.reload() };
+// loadWidget is the same idea for the vendored widget bundle: a dynamic import() of a fixed
+// relative path can't be swapped out per-test any other way without import-map plumbing this
+// file otherwise has no need for.
+export const testHooks = {
+  reload: () => window.location.reload(),
+  loadWidget: () => import('../../deps/okta-signin-widget/dist/index.js'),
+};
 function reload() {
   testHooks.reload();
 }
@@ -146,73 +151,121 @@ export const isAvailable = (() => {
   };
 })();
 
-export function handleSignIn() {
-  // Centered on the current window (not just the screen, which would ignore which monitor
-  // the caller's window is actually on) — window.open() has no auto-center option of its own,
-  // it just defaults to wherever the browser's own placement heuristic puts a bare width/height.
-  const width = 500;
-  const height = 650;
-  const left = window.screenX + (window.outerWidth - width) / 2;
-  const top = window.screenY + (window.outerHeight - height) / 2;
-  // Opened synchronously, in the same task as the caller's click — popup blockers reject
-  // window.open() called after an await, so discovery has to happen after opening, not before.
-  const popup = window.open('', 'da-helix-admin-auth', `width=${width},height=${height},left=${left},top=${top}`);
-  if (!popup) return;
+// Public, non-secret OIDC client details (issuer + client_id) — see /auth/access-manager/config
+// in helix-admin-ams for why this is a separate call from discoverLoginUrl() above: the widget
+// authenticates directly against Okta from inside the page, so it needs these to initialize
+// itself, unlike the popup/redirect flow (now gone) where helix-admin constructed the real
+// Okta authorize URL server-side and the browser never needed to see them.
+async function fetchWidgetConfig() {
+  try {
+    const resp = await fetch(`${HLX_ADMIN}/auth/access-manager/config`, { credentials: 'omit' });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
 
-  (async () => {
-    const targetOrigin = new URL(HLX_ADMIN).origin;
-    let url;
-    try {
-      const loginUrl = await discoverLoginUrl();
-      url = loginUrl && new URL(loginUrl);
-    } catch {
-      url = null;
+const WIDGET_CSS_HREF = new URL('../../deps/okta-signin-widget/dist/css/okta-sign-in.min.css', import.meta.url).href;
+const DIALOG_STYLE_ID = 'da-helix-admin-auth-widget-dialog-style';
+
+function ensureWidgetStyle() {
+  if (document.querySelector(`link[href="${WIDGET_CSS_HREF}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = WIDGET_CSS_HREF;
+  document.head.append(link);
+
+  if (document.getElementById(DIALOG_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = DIALOG_STYLE_ID;
+  // Sizing/backdrop only — the widget's own CSS (above) handles everything inside it.
+  style.textContent = `
+    .da-helix-admin-auth-widget-dialog {
+      padding: 0;
+      border: none;
+      border-radius: 8px;
+      max-width: 480px;
+      width: 90vw;
     }
-    // /login only ever returns a same-deployment helix-admin URL (see discoverLoginUrl) — an
-    // origin check enforces that rather than just checking https:, which a compromised or
-    // misconfigured backend response could still satisfy while pointing anywhere else (a
-    // phishing/token-interception risk this popup would otherwise navigate straight to). Origin
-    // match also subsumes the old protocol check on its own: HLX_ADMIN is itself https, and a
-    // javascript: URI's origin is the string "null", never a real origin. Confirmed the real
-    // /login response's links are always same-origin (.../auth/<provider>) before tightening
-    // this, so it can't reject the legitimate flow. A rejected discovery fetch (network blip,
-    // bad JSON, etc.) hits the same close-and-give-up path as "no idp configured" — leaving the
-    // popup open and blank forever on a transient error would be worse than closing it.
-    if (!url || url.origin !== targetOrigin) {
-      popup.close();
+    .da-helix-admin-auth-widget-dialog::backdrop {
+      background: rgb(0 0 0 / 50%);
+    }
+  `;
+  document.head.append(style);
+}
+
+// Plain <dialog> on purpose — this module is shared by nx1 and nx2 (see file header), which
+// have no common dialog/modal component between them, and a native element needs neither.
+function createSignInDialog() {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'da-helix-admin-auth-widget-dialog';
+  const container = document.createElement('div');
+  // The widget's el option takes a CSS selector, not an element reference — id has to be
+  // unique enough that a stray leftover dialog from a previous, not-yet-cleaned-up attempt
+  // can't collide with it.
+  container.id = `da-helix-admin-auth-widget-${Date.now()}`;
+  dialog.append(container);
+  document.body.append(dialog);
+  return { dialog, container };
+}
+
+async function openSignInWidget() {
+  const config = await fetchWidgetConfig();
+  // No gesture-free fallback here (matching the old popup flow's same silent no-op on a
+  // discovery failure) — this click is the only gesture available, and there's nothing
+  // sensible to retry into without one.
+  if (!config) return;
+
+  ensureWidgetStyle();
+  const { dialog, container } = createSignInDialog();
+
+  let widget;
+  const cleanup = () => {
+    widget?.remove();
+    dialog.close();
+    dialog.remove();
+  };
+  dialog.addEventListener('cancel', cleanup);
+
+  try {
+    const { default: OktaSignIn } = await testHooks.loadWidget();
+    widget = new OktaSignIn({
+      baseUrl: new URL(config.issuer).origin,
+      clientId: config.clientId,
+      redirectUri: window.location.origin,
+      useInteractionCodeFlow: true,
+      authParams: {
+        issuer: config.issuer,
+        scopes: ['openid', 'profile', 'email'],
+      },
+    });
+    dialog.showModal();
+    const tokens = await widget.showSignInToGetTokens({ el: `#${container.id}` });
+    const idToken = tokens?.idToken?.idToken;
+    if (!idToken) {
+      cleanup();
       return;
     }
 
-    url.searchParams.set('client_id', 'da-live');
-    url.searchParams.set('redirect_uri', REDIRECT_URI);
-    url.searchParams.set('response_mode', 'popup');
-    popup.location = url.href;
+    const resp = await fetch(`${HLX_ADMIN}/auth/access-manager/exchange`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+    cleanup();
+    if (!resp.ok) return;
+    const { siteToken } = await resp.json();
+    if (!siteToken) return;
+    storeToken(siteToken);
+    reload();
+  } catch {
+    cleanup();
+  }
+}
 
-    let settled = false;
-    const finish = () => {
-      settled = true;
-      window.removeEventListener('message', onMessage);
-      clearInterval(poll);
-    };
-
-    function onMessage(event) {
-      if (settled || event.origin !== targetOrigin || event.source !== popup) return;
-      finish();
-      if (event.data?.siteToken) {
-        storeToken(event.data.siteToken);
-        reload();
-      } else {
-        // A correctly-originated message with no token (e.g. an explicit error payload)
-        // still needs the popup closed — finish() only stops watching it, it doesn't close it.
-        popup.close();
-      }
-    }
-    window.addEventListener('message', onMessage);
-
-    const poll = setInterval(() => {
-      if (popup.closed && !settled) finish();
-    }, POPUP_CLOSED_POLL_MS);
-  })();
+export function handleSignIn() {
+  return openSignInWidget();
 }
 
 export const loadIms = (() => {

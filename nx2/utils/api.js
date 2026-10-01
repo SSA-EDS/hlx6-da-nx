@@ -480,10 +480,11 @@ export const daFetch = async ({
 }) => {
   const { accessToken } = await loadIms();
   if (!accessToken) {
-    // The alt provider's handleSignIn() opens a popup, which needs a real user gesture behind
-    // it — this reactive, no-token-yet path (unlike ims.js's gesture-free top-level redirect)
-    // never has one. da-live's initIms()/loadPage() shows a real "Sign in" prompt instead,
-    // which does have a click behind it; calling handleSignIn() here would just silently no-op.
+    // The alt provider's handleSignIn() opens an embedded sign-in widget, which still needs a
+    // real user gesture behind it — this reactive, no-token-yet path (unlike ims.js's
+    // gesture-free top-level redirect) never has one. da-live's initIms()/loadPage() shows a
+    // real "Sign in" prompt instead, which does have a click behind it; calling handleSignIn()
+    // here would just silently no-op.
     if (!useAlt) handleSignIn();
     return {};
   }
