@@ -233,7 +233,9 @@ async function openSignInWidget() {
     widget = new OktaSignIn({
       baseUrl: new URL(config.issuer).origin,
       clientId: config.clientId,
-      redirectUri: window.location.origin,
+      // Never actually navigated to (see helix-admin's /auth/access-manager/config) — must
+      // still match one of the app's registered redirect URIs for Okta's own validation.
+      redirectUri: config.redirectUri,
       useInteractionCodeFlow: true,
       // The /oie export's constructor throws unless this is explicitly false — undefined
       // isn't good enough, it only ever checks for the exact opposite value (true).
