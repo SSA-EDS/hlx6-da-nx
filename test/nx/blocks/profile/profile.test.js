@@ -83,6 +83,11 @@ describe('nx-profile (nx1) — alt provider (Okta/access-manager)', () => {
     expect(links).to.not.include('Admin Console');
   });
 
+  it('keeps Legal notices — the Links section would otherwise render empty', () => {
+    const links = [...el.shadowRoot.querySelectorAll('.nx-menu-links a')].map((a) => a.textContent.trim());
+    expect(links).to.include('Legal notices');
+  });
+
   it('does not render an Organization section (no org data for the alt provider)', () => {
     expect(el.shadowRoot.querySelector('.nx-menu-btn-org')).to.be.null;
   });
