@@ -46,7 +46,7 @@ const STORAGE_KEY = 'da-helix-admin-auth';
 // file otherwise has no need for.
 export const testHooks = {
   reload: () => window.location.reload(),
-  loadWidget: () => import('../../deps/okta-signin-widget/dist/index.js'),
+  loadWidget: () => import('../deps/okta-signin-widget/dist/index.js'),
 };
 function reload() {
   testHooks.reload();
@@ -166,7 +166,7 @@ async function fetchWidgetConfig() {
   }
 }
 
-const WIDGET_CSS_HREF = new URL('../../deps/okta-signin-widget/dist/css/okta-sign-in.min.css', import.meta.url).href;
+const WIDGET_CSS_HREF = new URL('../deps/okta-signin-widget/dist/css/okta-sign-in.min.css', import.meta.url).href;
 const DIALOG_STYLE_ID = 'da-helix-admin-auth-widget-dialog-style';
 
 function ensureWidgetStyle() {
