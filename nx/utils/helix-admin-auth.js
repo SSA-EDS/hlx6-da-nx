@@ -191,6 +191,16 @@ function ensureWidgetStyle() {
     .da-helix-admin-auth-widget-dialog::backdrop {
       background: rgb(0 0 0 / 50%);
     }
+    /* EDS's own "progressive section appearance" rule (nexter.css/styles.css) hides any
+       main > div / main > div[data-status] site-wide until a section is decorated — it has
+       no scoping against unrelated <main> elements, so it also catches the widget's own
+       internal <main id="okta-sign-in"> and hides its content. nx2's variant nests this under
+       html:has(...), which outranks a plain extra class on specificity alone, so !important
+       is needed here rather than relying on specificity to restore the widget's own display. */
+    .da-helix-admin-auth-widget-dialog main > div,
+    .da-helix-admin-auth-widget-dialog main > div[data-status] {
+      display: revert !important;
+    }
   `;
   document.head.append(style);
 }
