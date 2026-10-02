@@ -220,7 +220,15 @@ function createSignInDialog() {
   return { dialog, container };
 }
 
-async function openSignInWidget() {
+// A user whose Okta account federates to an upstream IdP leaves the page mid-flow, then comes
+// back to the widget's redirectUri with the outcome in the query string.
+function isRedirectReturn() {
+  const params = new URLSearchParams(window.location.search);
+  return params.has('state')
+    && (params.has('interaction_code') || params.get('error') === 'interaction_required');
+}
+
+async function openSignInWidget({ resume = false } = {}) {
   const config = await fetchWidgetConfig();
   // No gesture-free fallback here (matching the old popup flow's same silent no-op on a
   // discovery failure) — this click is the only gesture available, and there's nothing
@@ -235,6 +243,8 @@ async function openSignInWidget() {
     widget?.remove();
     dialog.close();
     dialog.remove();
+    // reload() reuses the current URL, so leaving the redirect params would loop back here.
+    if (resume) window.history.replaceState(null, '', `${window.location.pathname}${window.location.hash}`);
   };
   dialog.addEventListener('cancel', cleanup);
 
@@ -243,9 +253,10 @@ async function openSignInWidget() {
     widget = new OktaSignIn({
       baseUrl: new URL(config.issuer).origin,
       clientId: config.clientId,
-      // Never actually navigated to (see helix-admin's /auth/access-manager/config) — must
-      // still match one of the app's registered redirect URIs for Okta's own validation.
-      redirectUri: config.redirectUri,
+      // Where Okta sends the tab back after an upstream-IdP hop; must be registered on the
+      // widget's Okta app. The widget's saved transaction lives in this origin's storage, so
+      // the resume has to happen here, not on helix-admin.
+      redirectUri: `${window.location.origin}/`,
       useInteractionCodeFlow: true,
       // The /oie export's constructor throws unless this is explicitly false — undefined
       // isn't good enough, it only ever checks for the exact opposite value (true).
@@ -255,9 +266,16 @@ async function openSignInWidget() {
         scopes: ['openid', 'profile', 'email'],
       },
     });
-    dialog.showModal();
-    const tokens = await widget.showSignInToGetTokens({ el: `#${container.id}` });
-    const idToken = tokens?.idToken?.idToken;
+    let idToken;
+    if (resume && new URLSearchParams(window.location.search).has('interaction_code')) {
+      const { authClient } = widget;
+      await authClient.idx.handleInteractionCodeRedirect(window.location.href);
+      ({ idToken: { idToken } = {} } = await authClient.tokenManager.getTokens());
+    } else {
+      dialog.showModal();
+      const tokens = await widget.showSignInToGetTokens({ el: `#${container.id}` });
+      idToken = tokens?.idToken?.idToken;
+    }
     if (!idToken) {
       cleanup();
       return;
@@ -286,6 +304,8 @@ export function handleSignIn() {
 export const loadIms = (() => {
   let auth;
   const setup = () => Promise.resolve().then(() => {
+    // Not awaited: it may need UI (MFA), which must not hold up the page's own startup.
+    if (isRedirectReturn()) openSignInWidget({ resume: true });
     const stored = readStoredToken();
     if (!stored) return { anonymous: true };
     // The transient site token's only real profile data (see file header) — `sub` is the

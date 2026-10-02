@@ -235,7 +235,6 @@ describe('helix-admin-auth', () => {
     const WIDGET_CONFIG = {
       issuer: `${new URL(HLX_ADMIN).origin.replace('admin', 'aemgovus-stub')}/oauth2/aus123`,
       clientId: 'widget-client-id',
-      redirectUri: `${HLX_ADMIN}/auth/access-manager/ack`,
     };
     let origLoadWidget;
 
@@ -298,9 +297,6 @@ describe('helix-admin-auth', () => {
         expect(config.clientId).to.equal(WIDGET_CONFIG.clientId);
         expect(config.authParams.issuer).to.equal(WIDGET_CONFIG.issuer);
         expect(config.baseUrl).to.equal(new URL(WIDGET_CONFIG.issuer).origin);
-        // Must be the backend-provided value (its own registered redirect URI), never derived
-        // from window.location — the widget never navigates here, but Okta still validates it.
-        expect(config.redirectUri).to.equal(WIDGET_CONFIG.redirectUri);
         expect(config.useInteractionCodeFlow).to.equal(true);
         // The /oie export's real constructor throws unless this is exactly false (confirmed
         // against the vendored widget directly, not just asserted here) — the stubbed widget
@@ -376,6 +372,126 @@ describe('helix-admin-auth', () => {
 
       expect(instance.remove.calledOnce).to.equal(true);
       expect(document.querySelector('dialog.da-helix-admin-auth-widget-dialog')).to.equal(null);
+    });
+
+    it('uses the page origin as the redirectUri, so an upstream-IdP hop returns here', async () => {
+      window.fetch = makeFetchStub();
+      const { OktaSignInStub } = stubWidget();
+      sinon.stub(testHooks, 'reload');
+
+      await handleSignIn();
+
+      expect(OktaSignInStub.firstCall.args[0].redirectUri).to.equal(`${window.location.origin}/`);
+    });
+  });
+
+  describe('returning from an upstream-IdP hop', () => {
+    const WIDGET_CONFIG = { issuer: 'https://okta.example/oauth2/aus123', clientId: 'widget-client-id' };
+    let origUrl;
+
+    beforeEach(() => {
+      origUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    });
+
+    afterEach(() => {
+      window.history.replaceState(null, '', origUrl);
+      document.querySelectorAll('dialog.da-helix-admin-auth-widget-dialog').forEach((d) => d.remove());
+    });
+
+    async function freshModule() {
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const reloadStub = sinon.stub(fresh.testHooks, 'reload');
+      return { fresh, reloadStub };
+    }
+
+    function stubFetch() {
+      window.fetch = async (url) => {
+        const u = url.toString();
+        if (u === `${HLX_ADMIN}/auth/access-manager/config`) return { ok: true, json: async () => WIDGET_CONFIG };
+        if (u === `${HLX_ADMIN}/auth/access-manager/exchange`) {
+          const siteToken = makeSiteToken(Math.floor(Date.now() / 1000) + 3600);
+          return { ok: true, json: async () => ({ siteToken }) };
+        }
+        throw new Error(`unexpected fetch: ${u}`);
+      };
+    }
+
+    const until = async (fn) => {
+      for (let i = 0; i < 50 && !fn(); i += 1) await new Promise((r) => { setTimeout(r, 10); });
+    };
+
+    it('does not start the widget on an ordinary page load', async () => {
+      window.fetch = async () => { throw new Error('no fetch expected'); };
+      const { fresh } = await freshModule();
+      const loadWidget = sinon.stub(fresh.testHooks, 'loadWidget');
+
+      await fresh.loadIms();
+
+      expect(loadWidget.called).to.equal(false);
+    });
+
+    it('completes a returned interaction_code, stores the token, and clears the redirect params', async () => {
+      window.history.replaceState(null, '', '/?state=s1&interaction_code=c1');
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const instance = {
+        authClient: {
+          idx: { handleInteractionCodeRedirect: sinon.stub().resolves() },
+          tokenManager: { getTokens: sinon.stub().resolves({ idToken: { idToken: 'raw-id-token' } }) },
+        },
+        showSignInToGetTokens: sinon.stub(),
+        remove: sinon.stub(),
+      };
+      sinon.stub(fresh.testHooks, 'loadWidget').resolves({ default: sinon.stub().returns(instance) });
+
+      const result = await fresh.loadIms();
+      await until(() => reloadStub.called);
+
+      expect(result).to.deep.equal({ anonymous: true });
+      expect(instance.authClient.idx.handleInteractionCodeRedirect.firstCall.args[0])
+        .to.contain('interaction_code=c1');
+      expect(instance.showSignInToGetTokens.called).to.equal(false);
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).token).to.match(/^hlxtst_/);
+      expect(window.location.search).to.equal('');
+      expect(reloadStub.calledOnce).to.equal(true);
+    });
+
+    it('resumes the widget in a dialog on interaction_required', async () => {
+      window.history.replaceState(null, '', '/?state=s1&error=interaction_required');
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const instance = {
+        showSignInToGetTokens: sinon.stub().resolves({ idToken: { idToken: 'raw-id-token' } }),
+        remove: sinon.stub(),
+      };
+      sinon.stub(fresh.testHooks, 'loadWidget').resolves({ default: sinon.stub().returns(instance) });
+
+      await fresh.loadIms();
+      await until(() => reloadStub.called);
+
+      expect(instance.showSignInToGetTokens.calledOnce).to.equal(true);
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).token).to.match(/^hlxtst_/);
+      expect(window.location.search).to.equal('');
+    });
+
+    it('cleans up and clears the params when there is no saved transaction to resume', async () => {
+      window.history.replaceState(null, '', '/?state=s1&interaction_code=c1');
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const instance = {
+        authClient: {
+          idx: { handleInteractionCodeRedirect: sinon.stub().rejects(new Error('No transaction data')) },
+        },
+        remove: sinon.stub(),
+      };
+      sinon.stub(fresh.testHooks, 'loadWidget').resolves({ default: sinon.stub().returns(instance) });
+
+      await fresh.loadIms();
+      await until(() => instance.remove.called);
+
+      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+      expect(reloadStub.called).to.equal(false);
+      expect(window.location.search).to.equal('');
     });
   });
 });
