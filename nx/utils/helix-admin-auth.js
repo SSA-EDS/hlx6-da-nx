@@ -265,6 +265,9 @@ async function openSignInWidget({ resume = false } = {}) {
         issuer: config.issuer,
         scopes: ['openid', 'profile', 'email'],
       },
+      // The customer's own Okta brand logo, from helix-admin; omitted entirely when there is none.
+      ...(config.logo ? { logo: config.logo, logoText: 'Logo' } : {}),
+      i18n: { en: { 'primaryauth.title': 'Sign In to Author' } },
     });
     let idToken;
     if (resume && new URLSearchParams(window.location.search).has('interaction_code')) {

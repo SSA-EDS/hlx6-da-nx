@@ -383,6 +383,40 @@ describe('helix-admin-auth', () => {
 
       expect(OktaSignInStub.firstCall.args[0].redirectUri).to.equal(`${window.location.origin}/`);
     });
+
+    it('passes the backend-provided logo to the widget', async () => {
+      window.fetch = makeFetchStub({ config: { ...WIDGET_CONFIG, logo: 'https://cdn.example/logo.png' } });
+      const { OktaSignInStub } = stubWidget();
+      sinon.stub(testHooks, 'reload');
+
+      await handleSignIn();
+
+      const options = OktaSignInStub.firstCall.args[0];
+      expect(options.logo).to.equal('https://cdn.example/logo.png');
+      expect(options.logoText).to.be.a('string');
+    });
+
+    it('leaves the logo options out when the backend provides none', async () => {
+      window.fetch = makeFetchStub();
+      const { OktaSignInStub } = stubWidget();
+      sinon.stub(testHooks, 'reload');
+
+      await handleSignIn();
+
+      const options = OktaSignInStub.firstCall.args[0];
+      expect(options).to.not.have.property('logo');
+      expect(options).to.not.have.property('logoText');
+    });
+
+    it('titles the dialog "Sign In to Author"', async () => {
+      window.fetch = makeFetchStub();
+      const { OktaSignInStub } = stubWidget();
+      sinon.stub(testHooks, 'reload');
+
+      await handleSignIn();
+
+      expect(OktaSignInStub.firstCall.args[0].i18n.en['primaryauth.title']).to.equal('Sign In to Author');
+    });
   });
 
   describe('returning from an upstream-IdP hop', () => {
