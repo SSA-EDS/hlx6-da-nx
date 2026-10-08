@@ -8,6 +8,17 @@ import { setMockIms, resetMockIms } from '../../../../mocks/ims.js';
 // module-level constant at import time, so setConfig() must resolve
 // before profile.js is ever imported — see the same pattern in
 // nav.test.js and feedback.test.js.
+//
+// Provider discovery is memoized on first use, so /login is pinned to an IMS-backed idp up
+// front instead of reaching the live backend, whose pinned provider would change this file's
+// outcome.
+const realFetch = window.fetch;
+window.fetch = async (url, opts) => {
+  if (url.toString().endsWith('/login')) {
+    return new Response(JSON.stringify({ links: { login_adobe: 'https://admin.example/auth/adobe' } }), { status: 200 });
+  }
+  return realFetch.call(window, url, opts);
+};
 await setConfig({ hostnames: [] });
 await import('../../../../../blocks/profile/profile.js');
 
@@ -77,6 +88,15 @@ describe('nx-profile', () => {
     resetMockIms();
     document.querySelectorAll('nx-profile').forEach((el) => el.remove());
     document.querySelectorAll('nx-dialog').forEach((el) => el.remove());
+  });
+
+  it('uses the nx2 IMS module, not the alt provider, when an IMS-backed idp is pinned', async () => {
+    setMockIms({ displayName: 'IMS User' });
+    const el = await createProfile();
+    await waitForSignedIn(el);
+
+    expect(el._useAlt).to.equal(false);
+    expect(el._ims.displayName).to.equal('IMS User');
   });
 
   it('renders a sign-in button when the user is anonymous', async () => {
