@@ -26,10 +26,10 @@
   only screen and (min-device-pixel-ratio: 2),
   only screen and (min-resolution: 2dppx) {
   .custom-checkbox label {
-    background-image: url('../img/ui/forms/checkbox-sign-in-widget-a11y@2x.png');
+    background-image: url('../img/ui/forms/checkbox-sign-in-widget-a11y-2x.png');
   }
   .custom-radio label {
-    background: url('../img/ui/forms/radiobutton-01-a11y@2x.png') no-repeat;
+    background: url('../img/ui/forms/radiobutton-01-a11y-2x.png') no-repeat;
     background-size: 50px 820px;
   }
 }
