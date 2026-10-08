@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'da-lit';
 import { getConfig, loc } from '../../scripts/nx.js';
-import { resolveAuthProvider } from '../../../nx/utils/helix-admin-auth.js';
+import * as altAuth from '../../../nx/utils/helix-admin-auth.js';
 import { loadStyle } from '../../utils/utils.js';
 import { signout } from '../../utils/api.js';
 
@@ -66,7 +66,10 @@ class NxProfile extends LitElement {
     // handler below binds to an already-settled provider, safe to call directly from the click
     // itself (see helix-admin-auth.js's resolveAuthProvider() for why that ordering matters for
     // the alt provider's popup).
-    const { useAlt, authModule } = await resolveAuthProvider();
+    // resolveAuthProvider()'s IMS branch is nx1's ims.js, which has no client id on nx2 sites
+    // (it lives in nx2's own config), so pick nx2's ims.js here instead.
+    const useAlt = await altAuth.isAvailable();
+    const authModule = useAlt ? altAuth : await import('../../utils/ims.js');
     this._authModule = authModule;
     this._useAlt = useAlt;
     try {
