@@ -408,6 +408,17 @@ describe('helix-admin-auth', () => {
       expect(options).to.not.have.property('logoText');
     });
 
+    it('keeps page-wide img styles from distorting the brand logo', async () => {
+      window.fetch = makeFetchStub();
+      stubWidget();
+      sinon.stub(testHooks, 'reload');
+
+      await handleSignIn();
+
+      const css = document.getElementById('da-helix-admin-auth-widget-dialog-style').textContent;
+      expect(css).to.match(/\.auth-org-logo\s*\{[^}]*width:\s*auto[^}]*mask-image:\s*none/);
+    });
+
     it('titles the dialog "Sign In to Author"', async () => {
       window.fetch = makeFetchStub();
       const { OktaSignInStub } = stubWidget();

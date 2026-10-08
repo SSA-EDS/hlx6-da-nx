@@ -201,6 +201,13 @@ function ensureWidgetStyle() {
     .da-helix-admin-auth-widget-dialog main > div[data-status] {
       display: revert !important;
     }
+    /* da-live's browse.css styles every page-wide img as width:100% plus a fade mask, which
+       stretches and fades the brand logo; the widget's own max-width/max-height still apply. */
+    .da-helix-admin-auth-widget-dialog .auth-org-logo {
+      width: auto;
+      height: auto;
+      mask-image: none;
+    }
   `;
   document.head.append(style);
 }
