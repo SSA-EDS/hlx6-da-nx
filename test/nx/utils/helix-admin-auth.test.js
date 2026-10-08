@@ -419,6 +419,17 @@ describe('helix-admin-auth', () => {
       expect(css).to.match(/\.auth-org-logo\s*\{[^}]*width:\s*auto[^}]*mask-image:\s*none/);
     });
 
+    it('drops the widget\'s full-page top margin inside the dialog', async () => {
+      window.fetch = makeFetchStub();
+      stubWidget();
+      sinon.stub(testHooks, 'reload');
+
+      await handleSignIn();
+
+      const css = document.getElementById('da-helix-admin-auth-widget-dialog-style').textContent;
+      expect(css).to.match(/#okta-sign-in\s*\{[^}]*margin-top:\s*0/);
+    });
+
     it('titles the dialog "Sign In to Author"', async () => {
       window.fetch = makeFetchStub();
       const { OktaSignInStub } = stubWidget();

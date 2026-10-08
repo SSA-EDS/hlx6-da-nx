@@ -208,6 +208,11 @@ function ensureWidgetStyle() {
       height: auto;
       mask-image: none;
     }
+    /* The widget assumes a full-page login and adds margin-top: 100px (dropped only on short
+       screens), which shows as dead space above the card inside the dialog. */
+    .da-helix-admin-auth-widget-dialog #okta-sign-in {
+      margin-top: 0;
+    }
   `;
   document.head.append(style);
 }
