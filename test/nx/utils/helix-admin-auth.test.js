@@ -107,6 +107,33 @@ describe('helix-admin-auth', () => {
       expect(await isAvailable()).to.equal(true);
     });
 
+    ['adobe', 'adobe-stage', 'ims-na1', 'ims-na1-stg1'].forEach((name) => {
+      it(`resolves false when the pinned primary is the IMS-backed "${name}" idp`, async () => {
+        window.fetch = sinon.stub().resolves({
+          ok: true,
+          json: async () => ({
+            links: {
+              [`login_${name}`]: `${HLX_ADMIN}/auth/${name}`,
+              [`login_${name}_sa`]: `${HLX_ADMIN}/auth/${name}?selectAccount=true`,
+            },
+          }),
+        });
+        const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+        expect(await fresh.isAvailable()).to.equal(false);
+      });
+    });
+
+    it('resolves false when several idps are listed (nothing pinned)', async () => {
+      window.fetch = sinon.stub().resolves({
+        ok: true,
+        json: async () => ({
+          links: { login_adobe: 'https://a', 'login_access-manager': 'https://b' },
+        }),
+      });
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      expect(await fresh.isAvailable()).to.equal(false);
+    });
+
     it('resolves false when no idp is configured', async () => {
       window.fetch = sinon.stub().resolves({ ok: false });
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
