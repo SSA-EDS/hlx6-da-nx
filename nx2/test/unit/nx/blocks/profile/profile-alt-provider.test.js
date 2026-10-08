@@ -43,20 +43,19 @@ async function waitFor(predicate, { attempts = 50, interval = 10 } = {}) {
   return predicate();
 }
 
+// Installed before anything below can trigger the memoized isAvailable() check, so it never
+// reaches the real backend (whose pinned provider would decide this test's outcome).
+const restoreDiscovery = stubDiscovery();
+
 await setConfig({ hostnames: [] });
 await import('../../../../../blocks/profile/profile.js');
 
 describe('nx-profile — alt provider (Okta/access-manager)', () => {
   let el;
-  let restoreDiscovery;
 
   before(async () => {
-    // Scoped to this describe block's own setup, not file-top-level — isAvailable()'s
-    // discovery fetch and the stored token are both only read once, on connectedCallback
-    // below, so there's no need to have either active any earlier than immediately before
-    // that (minimizes the window localStorage is polluted for any other test file sharing
-    // this origin).
-    restoreDiscovery = stubDiscovery();
+    // The stored token is only read once, on connectedCallback below, so it is set as late as
+    // possible to keep localStorage clean for other test files sharing this origin.
     storeAltProviderToken({ sub: 'user@example.com', name: 'Test User' });
     el = document.createElement('nx-profile');
     document.body.append(el);

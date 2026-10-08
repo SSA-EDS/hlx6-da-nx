@@ -121,7 +121,10 @@ export function isAuthenticated() {
 // (isIdpAvailable() in helix-admin-ams). So the count itself is the signal: more than one link
 // means nothing is pinned and IMS/Adobe should stay the default, same as before this file
 // existed — picking whichever entry happens to sort first (the previous behavior here) would
-// silently misroute to an arbitrary provider instead. Never read the idp's name either way.
+// silently misroute to an arbitrary provider instead. The one name that does matter: a pin on
+// an IMS-backed idp (IMS_IDPS) means "use ims.js", not this module, so it must not count.
+const IMS_IDPS = new Set(['adobe', 'adobe-stage', 'ims-na1', 'ims-na1-stg1']);
+
 async function discoverLoginUrl() {
   const resp = await fetch(`${HLX_ADMIN}/login`, { credentials: 'omit' });
   if (!resp.ok) return null;
@@ -129,7 +132,9 @@ async function discoverLoginUrl() {
   const entries = Object.entries(links || {}).filter(
     ([key]) => key.startsWith('login_') && !key.endsWith('_sa'),
   );
-  return entries.length === 1 ? entries[0][1] : null;
+  if (entries.length !== 1) return null;
+  const [[key, url]] = entries;
+  return IMS_IDPS.has(key.slice('login_'.length)) ? null : url;
 }
 
 // Called from top-level bootstrap choke points on every page load (unlike discoverLoginUrl's
