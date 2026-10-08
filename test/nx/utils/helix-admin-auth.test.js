@@ -427,7 +427,8 @@ describe('helix-admin-auth', () => {
       await handleSignIn();
 
       const css = document.getElementById('da-helix-admin-auth-widget-dialog-style').textContent;
-      expect(css).to.match(/#okta-sign-in\s*\{[^}]*margin-top:\s*0/);
+      expect(css).to.match(/#okta-sign-in\s*\{[^}]*margin-top:\s*0[^}]*margin-bottom:\s*0/);
+      expect(css).to.match(/\.da-helix-admin-auth-widget-dialog\s*\{[^}]*padding:\s*16px 0/);
     });
 
     it('titles the dialog "Sign In to Author"', async () => {

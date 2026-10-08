@@ -182,7 +182,7 @@ function ensureWidgetStyle() {
   // Sizing/backdrop only — the widget's own CSS (above) handles everything inside it.
   style.textContent = `
     .da-helix-admin-auth-widget-dialog {
-      padding: 0;
+      padding: 16px 0;
       border: none;
       border-radius: 8px;
       max-width: 480px;
@@ -209,9 +209,10 @@ function ensureWidgetStyle() {
       mask-image: none;
     }
     /* The widget assumes a full-page login and adds margin-top: 100px (dropped only on short
-       screens), which shows as dead space above the card inside the dialog. */
+       screens) plus a bottom margin; the dialog's own padding sets the even spacing instead. */
     .da-helix-admin-auth-widget-dialog #okta-sign-in {
       margin-top: 0;
+      margin-bottom: 0;
     }
   `;
   document.head.append(style);
