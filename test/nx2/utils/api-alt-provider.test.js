@@ -24,7 +24,7 @@ describe('nx2/utils/api — alt provider awareness', () => {
   it('uses the alt provider when helix-admin has one configured', async () => {
     window.fetch = sinon.stub().resolves({
       ok: true,
-      json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
     });
     const api = await import('../../../nx2/utils/api.js');
     expect(api.useAlt).to.equal(true);
@@ -33,7 +33,7 @@ describe('nx2/utils/api — alt provider awareness', () => {
   it('does not call handleSignIn reactively on a missing token — no gesture behind this path, would just silently no-op', async () => {
     window.fetch = sinon.stub().resolves({
       ok: true,
-      json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+      json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
     });
     const api = await import('../../../nx2/utils/api.js');
     const openStub = sinon.stub();

@@ -37,7 +37,7 @@ describe('nx2/utils/api — alt provider site-token exchange', () => {
       if (u.endsWith('/login')) {
         return {
           ok: true,
-          json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+          json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
         };
       }
       if (u === `${HLX_ADMIN}/auth/site/exchange`) {
@@ -73,7 +73,7 @@ describe('nx2/utils/api — alt provider site-token exchange', () => {
       if (u.endsWith('/login')) {
         return {
           ok: true,
-          json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+          json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
         };
       }
       return new Response('{}', { status: 401, headers: opts.headers });

@@ -102,7 +102,7 @@ describe('helix-admin-auth', () => {
       // directly, matching the loadIms block's own first test above.
       window.fetch = sinon.stub().resolves({
         ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+        json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
       });
       expect(await isAvailable()).to.equal(true);
     });
@@ -127,7 +127,7 @@ describe('helix-admin-auth', () => {
       window.fetch = sinon.stub().resolves({
         ok: true,
         json: async () => ({
-          links: { login_adobe: 'https://a', 'login_access-manager': 'https://b' },
+          links: { login_adobe: 'https://a', login_okta: 'https://b' },
         }),
       });
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
@@ -151,7 +151,7 @@ describe('helix-admin-auth', () => {
     it('memoizes — a second call does not re-fetch', async () => {
       const fetchStub = sinon.stub().resolves({
         ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+        json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
       });
       window.fetch = fetchStub;
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
@@ -165,7 +165,7 @@ describe('helix-admin-auth', () => {
       fetchStub.onFirstCall().rejects(new Error('network down'));
       fetchStub.onSecondCall().resolves({
         ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+        json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
       });
       window.fetch = fetchStub;
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
@@ -178,7 +178,7 @@ describe('helix-admin-auth', () => {
     it('returns useAlt: true with this module\'s own functions when the alt provider is available', async () => {
       window.fetch = sinon.stub().resolves({
         ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+        json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
       });
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       const { useAlt, authModule } = await fresh.resolveAuthProvider();
@@ -213,7 +213,7 @@ describe('helix-admin-auth', () => {
     it('returns the alt provider\'s token when a valid session is stored', async () => {
       window.fetch = sinon.stub().resolves({
         ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+        json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
       });
       storeRawToken('hlxtst_abc.def.ghi', Math.floor(Date.now() / 1000) + 3600);
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
@@ -223,7 +223,7 @@ describe('helix-admin-auth', () => {
     it('returns null when the alt provider has no session', async () => {
       window.fetch = sinon.stub().resolves({
         ok: true,
-        json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+        json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
       });
       const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
       expect(await fresh.getAccessToken()).to.equal(null);
@@ -277,12 +277,12 @@ describe('helix-admin-auth', () => {
     function makeFetchStub({ config = WIDGET_CONFIG, exchangeOk = true, siteToken = 'hlxtst_abc' } = {}) {
       return async (url) => {
         const u = url.toString();
-        if (u === `${HLX_ADMIN}/auth/access-manager/config`) {
+        if (u === `${HLX_ADMIN}/auth/okta/config`) {
           return config
             ? { ok: true, json: async () => config }
             : { ok: false };
         }
-        if (u === `${HLX_ADMIN}/auth/access-manager/exchange`) {
+        if (u === `${HLX_ADMIN}/auth/okta/exchange`) {
           return exchangeOk
             ? { ok: true, json: async () => ({ siteToken }) }
             : { ok: false };
@@ -491,8 +491,8 @@ describe('helix-admin-auth', () => {
     function stubFetch() {
       window.fetch = async (url) => {
         const u = url.toString();
-        if (u === `${HLX_ADMIN}/auth/access-manager/config`) return { ok: true, json: async () => WIDGET_CONFIG };
-        if (u === `${HLX_ADMIN}/auth/access-manager/exchange`) {
+        if (u === `${HLX_ADMIN}/auth/okta/config`) return { ok: true, json: async () => WIDGET_CONFIG };
+        if (u === `${HLX_ADMIN}/auth/okta/exchange`) {
           const siteToken = makeSiteToken(Math.floor(Date.now() / 1000) + 3600);
           return { ok: true, json: async () => ({ siteToken }) };
         }

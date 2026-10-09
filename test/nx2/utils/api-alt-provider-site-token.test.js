@@ -31,7 +31,7 @@ describe('nx2/utils/api — alt provider site-token upgrade', () => {
       calls.push({ url: u, opts: { ...opts, headers: { ...opts.headers } } });
       if (u === `${HLX_ADMIN}/login`) {
         return new Response(JSON.stringify({
-          links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` },
+          links: { login_okta: `${HLX_ADMIN}/auth/okta` },
         }), { status: 200 });
       }
       if (u === `${HLX_ADMIN}/auth/site/exchange`) {
