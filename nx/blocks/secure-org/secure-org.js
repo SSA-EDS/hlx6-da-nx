@@ -1,5 +1,5 @@
 import { html, LitElement, nothing } from 'da-lit';
-import { loadIms } from '../../../nx2/utils/ims.js';
+import * as altAuth from '../../utils/helix-admin-auth.js';
 import { loadStyle } from '../../../nx2/utils/utils.js';
 import { loadConfig, saveConfig } from './utils.js';
 
@@ -46,8 +46,12 @@ class SecureOrg extends LitElement {
       return;
     }
 
+    const useAlt = await altAuth.isAvailable();
+    const { loadIms } = useAlt ? altAuth : await import('../../../nx2/utils/ims.js');
     const user = await loadIms();
-    if (user.emailVerified !== 'true') {
+    // emailVerified is an IMS-only profile field; the Okta path has already verified the email.
+    const verified = useAlt ? !!user.email : user.emailVerified === 'true';
+    if (!verified) {
       this._alert = {
         type: 'warning',
         message: 'Email has not been verified.',
