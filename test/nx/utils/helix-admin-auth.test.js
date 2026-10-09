@@ -653,28 +653,48 @@ describe('helix-admin-auth', () => {
       for (let i = 0; i < 50 && !fn(); i += 1) await new Promise((r) => { setTimeout(r, 10); });
     };
 
-    it('signs in from an existing Okta session without showing the widget', async () => {
+    it('signs in from an existing Okta session without showing the widget or reloading', async () => {
       stubFetch();
       const { fresh, reloadStub } = await freshModule();
       const { instance } = stubWidget(fresh, success());
 
       const result = await fresh.loadIms();
-      await until(() => reloadStub.called);
 
-      expect(result).to.deep.equal({ anonymous: true });
-      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).token).to.match(/^hlxtst_/);
+      expect(result.accessToken.token).to.match(/^hlxtst_/);
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).token)
+        .to.equal(result.accessToken.token);
+      expect(localStorage.getItem('nx-ims')).to.equal('true');
       expect(instance.showSignInToGetTokens.called).to.equal(false);
       expect(instance.remove.calledOnce).to.equal(true);
+      expect(reloadStub.called).to.equal(false);
+    });
+
+    it('carries on anonymous past the time limit, then reloads once the sign-in lands', async () => {
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      fresh.testHooks.silentWaitMs = 10;
+      let release;
+      const start = sinon.stub().returns(new Promise((resolve) => {
+        release = () => resolve({ status: 'SUCCESS', interactionCode: 'ic-1', meta: { codeVerifier: 'cv-1' } });
+      }));
+      stubWidget(fresh, start);
+
+      const result = await fresh.loadIms();
+      expect(result).to.deep.equal({ anonymous: true });
+      expect(reloadStub.called).to.equal(false);
+
+      release();
+      await until(() => reloadStub.called);
       expect(reloadStub.calledOnce).to.equal(true);
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).token).to.match(/^hlxtst_/);
     });
 
     it('exchanges the interaction code for tokens before the site-token exchange', async () => {
       stubFetch();
-      const { fresh, reloadStub } = await freshModule();
+      const { fresh } = await freshModule();
       const { exchangeCodeForTokens } = stubWidget(fresh, success());
 
       await fresh.loadIms();
-      await until(() => reloadStub.called);
 
       expect(exchangeCodeForTokens.firstCall.args[0])
         .to.deep.equal({ interactionCode: 'ic-1', codeVerifier: 'cv-1' });
@@ -682,12 +702,11 @@ describe('helix-admin-auth', () => {
 
     it('falls back to the code verifier saved with the transaction', async () => {
       stubFetch();
-      const { fresh, reloadStub } = await freshModule();
+      const { fresh } = await freshModule();
       const start = sinon.stub().resolves({ status: 'SUCCESS', interactionCode: 'ic-1' });
       const { exchangeCodeForTokens } = stubWidget(fresh, start);
 
       await fresh.loadIms();
-      await until(() => reloadStub.called);
 
       expect(exchangeCodeForTokens.firstCall.args[0].codeVerifier).to.equal('saved-verifier');
     });
