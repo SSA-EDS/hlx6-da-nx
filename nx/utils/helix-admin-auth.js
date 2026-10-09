@@ -344,10 +344,15 @@ async function trySilentSignIn() {
     if (!config) return;
     const { default: OktaSignIn } = await testHooks.loadWidget();
     widget = buildWidget(OktaSignIn, config);
-    const { status, tokens } = await widget.authClient.idx.start();
-    const idToken = status === 'SUCCESS' ? tokens?.idToken?.idToken : null;
-    if (!idToken) return;
-    const siteToken = await exchangeIdToken(idToken);
+    const { authClient } = widget;
+    // start() never exchanges the code itself; it hands back the interaction code only.
+    const { status, interactionCode, meta } = await authClient.idx.start();
+    if (status !== 'SUCCESS' || !interactionCode) return;
+    const codeVerifier = meta?.codeVerifier ?? authClient.transactionManager.load()?.codeVerifier;
+    const { tokens } = await authClient.token.exchangeCodeForTokens({
+      interactionCode, codeVerifier,
+    });
+    const siteToken = tokens?.idToken ? await exchangeIdToken(tokens.idToken.idToken) : null;
     if (!siteToken) return;
     storeToken(siteToken);
     reload();

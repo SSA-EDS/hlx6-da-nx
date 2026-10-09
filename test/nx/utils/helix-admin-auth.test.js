@@ -627,19 +627,26 @@ describe('helix-admin-auth', () => {
       };
     }
 
-    function stubWidget(fresh, start) {
+    function stubWidget(fresh, start, exchange) {
+      const exchangeCodeForTokens = exchange || sinon.stub().resolves({
+        tokens: { idToken: { idToken: 'raw-id-token' } },
+      });
       const instance = {
-        authClient: { idx: { start } },
+        authClient: {
+          idx: { start },
+          token: { exchangeCodeForTokens },
+          transactionManager: { load: sinon.stub().returns({ codeVerifier: 'saved-verifier' }) },
+        },
         showSignInToGetTokens: sinon.stub(),
         remove: sinon.stub(),
       };
       const loadWidget = sinon.stub(fresh.testHooks, 'loadWidget')
         .resolves({ default: sinon.stub().returns(instance) });
-      return { instance, loadWidget };
+      return { instance, loadWidget, exchangeCodeForTokens };
     }
 
     const success = () => sinon.stub().resolves({
-      status: 'SUCCESS', tokens: { idToken: { idToken: 'raw-id-token' } },
+      status: 'SUCCESS', interactionCode: 'ic-1', meta: { codeVerifier: 'cv-1' },
     });
 
     const until = async (fn) => {
@@ -659,6 +666,42 @@ describe('helix-admin-auth', () => {
       expect(instance.showSignInToGetTokens.called).to.equal(false);
       expect(instance.remove.calledOnce).to.equal(true);
       expect(reloadStub.calledOnce).to.equal(true);
+    });
+
+    it('exchanges the interaction code for tokens before the site-token exchange', async () => {
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const { exchangeCodeForTokens } = stubWidget(fresh, success());
+
+      await fresh.loadIms();
+      await until(() => reloadStub.called);
+
+      expect(exchangeCodeForTokens.firstCall.args[0])
+        .to.deep.equal({ interactionCode: 'ic-1', codeVerifier: 'cv-1' });
+    });
+
+    it('falls back to the code verifier saved with the transaction', async () => {
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const start = sinon.stub().resolves({ status: 'SUCCESS', interactionCode: 'ic-1' });
+      const { exchangeCodeForTokens } = stubWidget(fresh, start);
+
+      await fresh.loadIms();
+      await until(() => reloadStub.called);
+
+      expect(exchangeCodeForTokens.firstCall.args[0].codeVerifier).to.equal('saved-verifier');
+    });
+
+    it('stays anonymous when the code exchange returns no id token', async () => {
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const { instance } = stubWidget(fresh, success(), sinon.stub().resolves({ tokens: {} }));
+
+      await fresh.loadIms();
+      await until(() => instance.remove.called);
+
+      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+      expect(reloadStub.called).to.equal(false);
     });
 
     it('stays anonymous when Okta needs user input', async () => {
