@@ -37,6 +37,9 @@
 import { HLX_ADMIN } from './utils.js';
 
 const STORAGE_KEY = 'da-helix-admin-auth';
+// Set on an explicit sign-out so the silent sign-in doesn't undo it; the Okta session outlives it.
+const SIGNED_OUT_KEY = 'da-helix-admin-signed-out';
+const SILENT_TRIED_KEY = 'da-helix-admin-silent-tried';
 
 // window.location.reload is a non-configurable, non-writable own property in real browsers
 // (confirmed empirically, not an assumption) — tests can't stub or reassign it directly.
@@ -95,6 +98,7 @@ function storeToken(siteToken) {
   if (!payload?.exp) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: siteToken, exp: payload.exp }));
   localStorage.setItem('nx-ims', true);
+  localStorage.removeItem(SIGNED_OUT_KEY);
 }
 
 // Real IMS's handleSignOut (ims.js) redirects the whole page to IMS's own logout flow, which
@@ -104,6 +108,7 @@ function storeToken(siteToken) {
 export function handleSignOut() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem('nx-ims');
+  localStorage.setItem(SIGNED_OUT_KEY, true);
   reload();
 }
 
@@ -246,6 +251,39 @@ function isRedirectReturn() {
     && (params.has('interaction_code') || params.get('error') === 'interaction_required');
 }
 
+function buildWidget(OktaSignIn, config) {
+  return new OktaSignIn({
+    baseUrl: new URL(config.issuer).origin,
+    clientId: config.clientId,
+    // Where Okta sends the tab back after an upstream-IdP hop; must be registered on the
+    // widget's Okta app. The widget's saved transaction lives in this origin's storage, so
+    // the resume has to happen here, not on helix-admin.
+    redirectUri: `${window.location.origin}/`,
+    useInteractionCodeFlow: true,
+    // The /oie export's constructor throws unless this is explicitly false — undefined
+    // isn't good enough, it only ever checks for the exact opposite value (true).
+    useClassicEngine: false,
+    authParams: {
+      issuer: config.issuer,
+      scopes: ['openid', 'profile', 'email'],
+    },
+    // The customer's own Okta brand logo, from helix-admin; omitted entirely when there is none.
+    ...(config.logo ? { logo: config.logo, logoText: 'Logo' } : {}),
+    i18n: { en: { 'primaryauth.title': 'Sign In to Author' } },
+  });
+}
+
+async function exchangeIdToken(idToken) {
+  const resp = await fetch(`${HLX_ADMIN}/auth/okta/exchange`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ idToken }),
+  });
+  if (!resp.ok) return null;
+  const { siteToken } = await resp.json();
+  return siteToken || null;
+}
+
 async function openSignInWidget({ resume = false } = {}) {
   const config = await fetchWidgetConfig();
   // No gesture-free fallback here (matching the old popup flow's same silent no-op on a
@@ -268,25 +306,7 @@ async function openSignInWidget({ resume = false } = {}) {
 
   try {
     const { default: OktaSignIn } = await testHooks.loadWidget();
-    widget = new OktaSignIn({
-      baseUrl: new URL(config.issuer).origin,
-      clientId: config.clientId,
-      // Where Okta sends the tab back after an upstream-IdP hop; must be registered on the
-      // widget's Okta app. The widget's saved transaction lives in this origin's storage, so
-      // the resume has to happen here, not on helix-admin.
-      redirectUri: `${window.location.origin}/`,
-      useInteractionCodeFlow: true,
-      // The /oie export's constructor throws unless this is explicitly false — undefined
-      // isn't good enough, it only ever checks for the exact opposite value (true).
-      useClassicEngine: false,
-      authParams: {
-        issuer: config.issuer,
-        scopes: ['openid', 'profile', 'email'],
-      },
-      // The customer's own Okta brand logo, from helix-admin; omitted entirely when there is none.
-      ...(config.logo ? { logo: config.logo, logoText: 'Logo' } : {}),
-      i18n: { en: { 'primaryauth.title': 'Sign In to Author' } },
-    });
+    widget = buildWidget(OktaSignIn, config);
     let idToken;
     if (resume && new URLSearchParams(window.location.search).has('interaction_code')) {
       const { authClient } = widget;
@@ -302,19 +322,39 @@ async function openSignInWidget({ resume = false } = {}) {
       return;
     }
 
-    const resp = await fetch(`${HLX_ADMIN}/auth/okta/exchange`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ idToken }),
-    });
+    const siteToken = await exchangeIdToken(idToken);
     cleanup();
-    if (!resp.ok) return;
-    const { siteToken } = await resp.json();
     if (!siteToken) return;
     storeToken(siteToken);
     reload();
   } catch {
     cleanup();
+  }
+}
+
+// The session is per-origin, so a user already signed in elsewhere (e.g. via the sidekick on
+// the preview site) looks anonymous here although their Okta session is live. Ask Okta once,
+// without UI; if that needs user input, stay anonymous and leave it to the sign-in button.
+async function trySilentSignIn() {
+  if (localStorage.getItem(SIGNED_OUT_KEY) || sessionStorage.getItem(SILENT_TRIED_KEY)) return;
+  sessionStorage.setItem(SILENT_TRIED_KEY, true);
+  let widget;
+  try {
+    const config = await fetchWidgetConfig();
+    if (!config) return;
+    const { default: OktaSignIn } = await testHooks.loadWidget();
+    widget = buildWidget(OktaSignIn, config);
+    const { status, tokens } = await widget.authClient.idx.start();
+    const idToken = status === 'SUCCESS' ? tokens?.idToken?.idToken : null;
+    if (!idToken) return;
+    const siteToken = await exchangeIdToken(idToken);
+    if (!siteToken) return;
+    storeToken(siteToken);
+    reload();
+  } catch {
+    // no usable session; manual sign-in still works
+  } finally {
+    widget?.remove();
   }
 }
 
@@ -326,9 +366,13 @@ export const loadIms = (() => {
   let auth;
   const setup = () => Promise.resolve().then(() => {
     // Not awaited: it may need UI (MFA), which must not hold up the page's own startup.
-    if (isRedirectReturn()) openSignInWidget({ resume: true });
+    const redirectReturn = isRedirectReturn();
+    if (redirectReturn) openSignInWidget({ resume: true });
     const stored = readStoredToken();
-    if (!stored) return { anonymous: true };
+    if (!stored) {
+      if (!redirectReturn) trySilentSignIn();
+      return { anonymous: true };
+    }
     // The transient site token's only real profile data (see file header) — `sub` is the
     // signed-in user's email (helix-admin-ams's getTransientSiteTokenInfo/
     // getTransientAccountTokenInfo both set it as the subject), and `name` (when present) is
