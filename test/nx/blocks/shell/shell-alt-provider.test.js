@@ -13,7 +13,7 @@ function b64url(obj) {
   return btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-describe('nx/blocks/shell/shell.js — alt provider (Okta/access-manager)', () => {
+describe('nx/blocks/shell/shell.js — alt provider (Okta)', () => {
   let origFetch;
   let shell;
 
@@ -23,7 +23,7 @@ describe('nx/blocks/shell/shell.js — alt provider (Okta/access-manager)', () =
       const u = url.toString();
       if (u === `${HLX_ADMIN}/login`) {
         return new Response(JSON.stringify({
-          links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` },
+          links: { login_okta: `${HLX_ADMIN}/auth/okta` },
         }), { status: 200 });
       }
       return new Response('{}', { status: 200 });

@@ -9,7 +9,7 @@ import { resolveAuthProvider } from '../../utils/helix-admin-auth.js';
 
 // Hardcoded to ims.js alone before this, this never resolved anything for the alt provider —
 // postMessage below always carried token: undefined to the embedded app, a guaranteed 401 on
-// its own backend for every Okta/access-manager user, not just an edge case.
+// its own backend for every Okta user, not just an edge case.
 // Exported (otherwise module-private) so tests can assert on it directly, without needing to
 // drive the full init()/iframe/postMessage lifecycle just to check which provider resolved.
 const { authModule } = await resolveAuthProvider();

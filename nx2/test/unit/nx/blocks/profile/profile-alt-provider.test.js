@@ -26,7 +26,7 @@ function stubDiscovery() {
     const urlStr = typeof url === 'string' ? url : url.toString();
     if (urlStr === `${HLX_ADMIN}/login`) {
       return new Response(JSON.stringify({
-        links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` },
+        links: { login_okta: `${HLX_ADMIN}/auth/okta` },
       }), { status: 200 });
     }
     return saved.call(window, url, opts);
@@ -50,7 +50,7 @@ const restoreDiscovery = stubDiscovery();
 await setConfig({ hostnames: [] });
 await import('../../../../../blocks/profile/profile.js');
 
-describe('nx-profile — alt provider (Okta/access-manager)', () => {
+describe('nx-profile — alt provider (Okta)', () => {
   let el;
 
   before(async () => {

@@ -156,14 +156,14 @@ export const isAvailable = (() => {
   };
 })();
 
-// Public, non-secret OIDC client details (issuer + client_id) — see /auth/access-manager/config
+// Public, non-secret OIDC client details (issuer + client_id) — see /auth/okta/config
 // in helix-admin-ams for why this is a separate call from discoverLoginUrl() above: the widget
 // authenticates directly against Okta from inside the page, so it needs these to initialize
 // itself, unlike the popup/redirect flow (now gone) where helix-admin constructed the real
 // Okta authorize URL server-side and the browser never needed to see them.
 async function fetchWidgetConfig() {
   try {
-    const resp = await fetch(`${HLX_ADMIN}/auth/access-manager/config`, { credentials: 'omit' });
+    const resp = await fetch(`${HLX_ADMIN}/auth/okta/config`, { credentials: 'omit' });
     if (!resp.ok) return null;
     return await resp.json();
   } catch {
@@ -302,7 +302,7 @@ async function openSignInWidget({ resume = false } = {}) {
       return;
     }
 
-    const resp = await fetch(`${HLX_ADMIN}/auth/access-manager/exchange`, {
+    const resp = await fetch(`${HLX_ADMIN}/auth/okta/exchange`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ idToken }),

@@ -16,7 +16,7 @@ function makeSiteToken(exp) {
 function stubLoginDiscovery(fetchStub) {
   fetchStub.withArgs(`${HLX_ADMIN}/login`).resolves({
     ok: true,
-    json: async () => ({ links: { 'login_access-manager': `${HLX_ADMIN}/auth/access-manager` } }),
+    json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
   });
 }
 
