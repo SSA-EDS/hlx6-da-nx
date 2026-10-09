@@ -50,6 +50,8 @@ const SILENT_TRIED_KEY = 'da-helix-admin-silent-tried';
 export const testHooks = {
   reload: () => window.location.reload(),
   loadWidget: () => import('../deps/okta-signin-widget/dist/index.js'),
+  // How long startup waits for the silent sign-in before continuing anonymous.
+  silentWaitMs: 5000,
 };
 function reload() {
   testHooks.reload();
@@ -336,28 +338,29 @@ async function openSignInWidget({ resume = false } = {}) {
 // the preview site) looks anonymous here although their Okta session is live. Ask Okta once,
 // without UI; if that needs user input, stay anonymous and leave it to the sign-in button.
 async function trySilentSignIn() {
-  if (localStorage.getItem(SIGNED_OUT_KEY) || sessionStorage.getItem(SILENT_TRIED_KEY)) return;
+  if (localStorage.getItem(SIGNED_OUT_KEY) || sessionStorage.getItem(SILENT_TRIED_KEY)) return null;
   sessionStorage.setItem(SILENT_TRIED_KEY, true);
   let widget;
   try {
     const config = await fetchWidgetConfig();
-    if (!config) return;
+    if (!config) return null;
     const { default: OktaSignIn } = await testHooks.loadWidget();
     widget = buildWidget(OktaSignIn, config);
     const { authClient } = widget;
     // start() never exchanges the code itself; it hands back the interaction code only.
     const { status, interactionCode, meta } = await authClient.idx.start();
-    if (status !== 'SUCCESS' || !interactionCode) return;
+    if (status !== 'SUCCESS' || !interactionCode) return null;
     const codeVerifier = meta?.codeVerifier ?? authClient.transactionManager.load()?.codeVerifier;
     const { tokens } = await authClient.token.exchangeCodeForTokens({
       interactionCode, codeVerifier,
     });
     const siteToken = tokens?.idToken ? await exchangeIdToken(tokens.idToken.idToken) : null;
-    if (!siteToken) return;
+    if (!siteToken) return null;
     storeToken(siteToken);
-    reload();
+    return siteToken;
   } catch {
     // no usable session; manual sign-in still works
+    return null;
   } finally {
     widget?.remove();
   }
@@ -367,32 +370,57 @@ export function handleSignIn() {
   return openSignInWidget();
 }
 
+// Resolves with the signed-in details (see loadIms below) for a transient site token.
+function detailsFromToken(token) {
+  // The transient site token's only real profile data (see file header) — `sub` is the
+  // signed-in user's email (helix-admin-ams's getTransientSiteTokenInfo/
+  // getTransientAccountTokenInfo both set it as the subject), and `name` (when present) is
+  // threaded through from whatever the idp's own id_token provided at sign-in time. Surfaced
+  // as `displayName`, not `name` — matches nx2/blocks/profile/profile.js's existing IMS
+  // contract (`this._ims.displayName`), so that component doesn't need a second field name
+  // for the same concept. Decode failure (or missing fields) falls back to omitting them
+  // rather than throwing, same as storeToken's own handling.
+  const payload = decodeJwtPayload(token.replace(/^hlxtst_/, ''));
+  return {
+    accessToken: { token },
+    ...(payload?.sub ? { email: payload.sub } : {}),
+    ...(payload?.name ? { displayName: payload.name } : {}),
+  };
+}
+
+// Bounded wait: callers gate their first authenticated requests on loadIms(), so waiting here
+// avoids a burst of anonymous 401s and a full reload. If Okta is slow, carry on anonymous and
+// reload once it does sign in.
+async function signInSilentlyWithinBudget() {
+  let timedOut = false;
+  const silent = trySilentSignIn();
+  const siteToken = await Promise.race([
+    silent,
+    new Promise((resolve) => {
+      setTimeout(() => {
+        timedOut = true;
+        resolve(null);
+      }, testHooks.silentWaitMs);
+    }),
+  ]);
+  if (!siteToken) {
+    silent.then((late) => { if (late && timedOut) reload(); });
+  }
+  return siteToken;
+}
+
 export const loadIms = (() => {
   let auth;
-  const setup = () => Promise.resolve().then(() => {
+  const setup = async () => {
     // Not awaited: it may need UI (MFA), which must not hold up the page's own startup.
     const redirectReturn = isRedirectReturn();
     if (redirectReturn) openSignInWidget({ resume: true });
     const stored = readStoredToken();
-    if (!stored) {
-      if (!redirectReturn) trySilentSignIn();
-      return { anonymous: true };
-    }
-    // The transient site token's only real profile data (see file header) — `sub` is the
-    // signed-in user's email (helix-admin-ams's getTransientSiteTokenInfo/
-    // getTransientAccountTokenInfo both set it as the subject), and `name` (when present) is
-    // threaded through from whatever the idp's own id_token provided at sign-in time. Surfaced
-    // as `displayName`, not `name` — matches nx2/blocks/profile/profile.js's existing IMS
-    // contract (`this._ims.displayName`), so that component doesn't need a second field name
-    // for the same concept. Decode failure (or missing fields) falls back to omitting them
-    // rather than throwing, same as storeToken's own handling.
-    const payload = decodeJwtPayload(stored.token.replace(/^hlxtst_/, ''));
-    return {
-      accessToken: { token: stored.token },
-      ...(payload?.sub ? { email: payload.sub } : {}),
-      ...(payload?.name ? { displayName: payload.name } : {}),
-    };
-  });
+    if (stored) return detailsFromToken(stored.token);
+    if (redirectReturn) return { anonymous: true };
+    const siteToken = await signInSilentlyWithinBudget();
+    return siteToken ? detailsFromToken(siteToken) : { anonymous: true };
+  };
   return () => {
     auth ??= setup();
     return auth;
