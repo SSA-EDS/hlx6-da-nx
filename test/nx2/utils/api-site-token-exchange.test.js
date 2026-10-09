@@ -26,7 +26,7 @@ describe('nx2/utils/api — alt provider site-token exchange', () => {
     sinon.restore();
   });
 
-  it('upgrades an account-level token to a site-scoped one on 401, then retries once', async () => {
+  it('exchanges for a site-scoped token before the first request, so it never 401s', async () => {
     const calls = [];
     window.fetch = sinon.stub().callsFake(async (url, opts = {}) => {
       const u = url.toString();
@@ -60,9 +60,34 @@ describe('nx2/utils/api — alt provider site-token exchange', () => {
     expect(resp.status).to.equal(200);
     expect(calls.some((c) => c.url === `${HLX_ADMIN}/auth/site/exchange`)).to.equal(true);
     const sourceCalls = calls.filter((c) => c.url.startsWith(`${DA_ADMIN}/source/`));
-    expect(sourceCalls).to.have.length(2);
+    expect(sourceCalls).to.have.length(1);
+    expect(sourceCalls[0].headers.Authorization).to.equal('Bearer hlxtst_site.scoped.token');
+  });
+
+  it('falls back to the account-level token when the site-token exchange fails', async () => {
+    const calls = [];
+    window.fetch = sinon.stub().callsFake(async (url, opts = {}) => {
+      const u = url.toString();
+      calls.push({ url: u, headers: { ...(opts.headers || {}) } });
+      if (u.endsWith('/login')) {
+        return {
+          ok: true,
+          json: async () => ({ links: { login_okta: `${HLX_ADMIN}/auth/okta` } }),
+        };
+      }
+      if (u === `${HLX_ADMIN}/auth/site/exchange`) return { ok: false, status: 403 };
+      return new Response('{}', { status: 401 });
+    });
+
+    const api = await import('../../../nx2/utils/api.js');
+    const resp = await api.daFetch({
+      url: `${DA_ADMIN}/source/otherorg/othersite/index.html`,
+    });
+
+    expect(resp.status).to.equal(401);
+    const sourceCalls = calls.filter((c) => c.url.startsWith(`${DA_ADMIN}/source/`));
+    expect(sourceCalls).to.have.length(1);
     expect(sourceCalls[0].headers.Authorization).to.equal('Bearer hlxtst_account.level.token');
-    expect(sourceCalls[1].headers.Authorization).to.equal('Bearer hlxtst_site.scoped.token');
   });
 
   it('does not attempt the site-token exchange when org/site are not known', async () => {

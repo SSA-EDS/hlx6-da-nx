@@ -54,15 +54,14 @@ describe('nx2/utils/api — alt provider site-token upgrade', () => {
     localStorage.removeItem(STORAGE_KEY);
   });
 
-  it('derives org/site from the URL and retries with a site token when the caller omits them', async () => {
+  it('derives org/site from the URL and uses a site token up front when the caller omits them', async () => {
     await api.daFetch({ url: `${DA_ADMIN}/source/myorg/mysite/index.html` });
 
     const exchangeCall = calls.find((c) => c.url === `${HLX_ADMIN}/auth/site/exchange`);
     expect(JSON.parse(exchangeCall.opts.body)).to.include({ org: 'myorg', site: 'mysite' });
 
     const sourceCalls = calls.filter((c) => c.url === `${DA_ADMIN}/source/myorg/mysite/index.html`);
-    expect(sourceCalls).to.have.lengthOf(2);
-    expect(sourceCalls[0].opts.headers.Authorization).to.equal('Bearer hlxtst_account.token.sig');
-    expect(sourceCalls[1].opts.headers.Authorization).to.equal('Bearer hlxtst_site.token.sig');
+    expect(sourceCalls).to.have.lengthOf(1);
+    expect(sourceCalls[0].opts.headers.Authorization).to.equal('Bearer hlxtst_site.token.sig');
   });
 });

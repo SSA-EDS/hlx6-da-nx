@@ -498,28 +498,27 @@ export const daFetch = async ({
       opts.headers['x-content-source-authorization'] = `Bearer ${token}`;
     }
   };
-  if (canToken) setBearer(accessToken.token);
-
-  let resp = await fetch(url, opts);
 
   // The alt provider's account-level token (minted before any org/site was known — see
   // helix-admin-ams's getTransientAccountTokenInfo) can't itself satisfy da-admin's per-site
   // audience check, so every such request 401s until upgraded. IMS never hits this: its access
   // token already works for any site, with authorization resolved separately, not audience-
-  // scoped. Upgrade via getAemSiteToken and retry once before treating this as a real failure.
-  // Most call sites never pass org/site explicitly — they're derived from the URL itself
-  // (every ALLOWED_TOKEN endpoint follows the same /{verb}/{org}/{site}/... shape) so this
-  // upgrade isn't silently skipped just because a caller didn't thread them through.
-  if (resp.status === 401 && useAlt && canToken) {
-    const resolved = org && site ? { org, site } : fromPath(new URL(url).pathname.replace(/^\/[^/]+/, ''));
-    if (resolved.org && resolved.site) {
-      const { siteToken } = await getAemSiteToken(resolved);
-      if (siteToken && siteToken !== accessToken.token) {
-        setBearer(siteToken);
-        resp = await fetch(url, opts);
-      }
-    }
+  // scoped. Most call sites never pass org/site explicitly — they're derived from the URL
+  // itself (every ALLOWED_TOKEN endpoint follows the same /{verb}/{org}/{site}/... shape).
+  // Upgraded up front rather than on a 401 so the first request doesn't fail; the exchange is
+  // cached per site, so a failed one just leaves the account-level token in use.
+  let target = {};
+  if (useAlt && canToken) {
+    target = org && site ? { org, site } : fromPath(new URL(url).pathname.replace(/^\/[^/]+/, ''));
   }
+  let { token } = accessToken;
+  if (target.org && target.site) {
+    const { siteToken } = await getAemSiteToken(target);
+    if (siteToken) token = siteToken;
+  }
+  if (canToken) setBearer(token);
+
+  const resp = await fetch(url, opts);
 
   if (resp.status === 401 || resp.status === 403) {
     if (redirect) window.location = `${window.location.origin}/not-found`;
