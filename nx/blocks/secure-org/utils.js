@@ -48,7 +48,7 @@ export async function loadConfig(org) {
   const result = { status: resp.status };
 
   if (!resp.ok) {
-    if (resp.status === 403 && resp.status === 401) {
+    if (resp.status === 403 || resp.status === 401) {
       result.message = 'You are not authorized to change this organization.';
     }
   } else {
