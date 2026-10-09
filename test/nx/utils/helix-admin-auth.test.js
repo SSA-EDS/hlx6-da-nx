@@ -6,6 +6,8 @@ import {
 } from '../../../nx/utils/helix-admin-auth.js';
 
 const STORAGE_KEY = 'da-helix-admin-auth';
+const SIGNED_OUT_KEY = 'da-helix-admin-signed-out';
+const SILENT_TRIED_KEY = 'da-helix-admin-silent-tried';
 
 function b64url(obj) {
   return btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -26,6 +28,9 @@ describe('helix-admin-auth', () => {
   beforeEach(() => {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem('nx-ims');
+    localStorage.removeItem(SIGNED_OUT_KEY);
+    // Keep the silent sign-in out of tests that aren't about it.
+    sessionStorage.setItem(SILENT_TRIED_KEY, true);
     origOpen = window.open;
     origFetch = window.fetch;
   });
@@ -33,6 +38,8 @@ describe('helix-admin-auth', () => {
   afterEach(() => {
     window.open = origOpen;
     window.fetch = origFetch;
+    localStorage.removeItem(SIGNED_OUT_KEY);
+    sessionStorage.removeItem(SILENT_TRIED_KEY);
     sinon.restore();
   });
 
@@ -240,6 +247,7 @@ describe('helix-admin-auth', () => {
         handleSignOut();
         expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
         expect(localStorage.getItem('nx-ims')).to.equal(null);
+        expect(localStorage.getItem(SIGNED_OUT_KEY)).to.equal('true');
         expect(reloadStub.calledOnce).to.equal(true);
       } finally {
         reloadStub.restore();
@@ -347,6 +355,21 @@ describe('helix-admin-auth', () => {
         const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
         expect(stored.token).to.equal(siteToken);
         expect(reloadStub.calledOnce).to.equal(true);
+      } finally {
+        reloadStub.restore();
+      }
+    });
+
+    it('clears the explicit sign-out marker once signed in again', async () => {
+      localStorage.setItem(SIGNED_OUT_KEY, true);
+      const siteToken = makeSiteToken(Math.floor(Date.now() / 1000) + 3600);
+      window.fetch = makeFetchStub({ siteToken });
+      stubWidget();
+      const reloadStub = sinon.stub(testHooks, 'reload');
+
+      try {
+        await handleSignIn();
+        expect(localStorage.getItem(SIGNED_OUT_KEY)).to.equal(null);
       } finally {
         reloadStub.restore();
       }
@@ -576,6 +599,152 @@ describe('helix-admin-auth', () => {
       expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
       expect(reloadStub.called).to.equal(false);
       expect(window.location.search).to.equal('');
+    });
+  });
+
+  describe('silent sign-in on load', () => {
+    const WIDGET_CONFIG = { issuer: 'https://okta.example/oauth2/aus123', clientId: 'widget-client-id' };
+
+    beforeEach(() => {
+      sessionStorage.removeItem(SILENT_TRIED_KEY);
+    });
+
+    async function freshModule() {
+      const fresh = await import(`../../../nx/utils/helix-admin-auth.js?fresh=${Math.random()}`);
+      const reloadStub = sinon.stub(fresh.testHooks, 'reload');
+      return { fresh, reloadStub };
+    }
+
+    function stubFetch({ exchangeOk = true } = {}) {
+      window.fetch = async (url) => {
+        const u = url.toString();
+        if (u === `${HLX_ADMIN}/auth/okta/config`) return { ok: true, json: async () => WIDGET_CONFIG };
+        if (u === `${HLX_ADMIN}/auth/okta/exchange`) {
+          const siteToken = makeSiteToken(Math.floor(Date.now() / 1000) + 3600);
+          return exchangeOk ? { ok: true, json: async () => ({ siteToken }) } : { ok: false };
+        }
+        throw new Error(`unexpected fetch: ${u}`);
+      };
+    }
+
+    function stubWidget(fresh, start) {
+      const instance = {
+        authClient: { idx: { start } },
+        showSignInToGetTokens: sinon.stub(),
+        remove: sinon.stub(),
+      };
+      const loadWidget = sinon.stub(fresh.testHooks, 'loadWidget')
+        .resolves({ default: sinon.stub().returns(instance) });
+      return { instance, loadWidget };
+    }
+
+    const success = () => sinon.stub().resolves({
+      status: 'SUCCESS', tokens: { idToken: { idToken: 'raw-id-token' } },
+    });
+
+    const until = async (fn) => {
+      for (let i = 0; i < 50 && !fn(); i += 1) await new Promise((r) => { setTimeout(r, 10); });
+    };
+
+    it('signs in from an existing Okta session without showing the widget', async () => {
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const { instance } = stubWidget(fresh, success());
+
+      const result = await fresh.loadIms();
+      await until(() => reloadStub.called);
+
+      expect(result).to.deep.equal({ anonymous: true });
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).token).to.match(/^hlxtst_/);
+      expect(instance.showSignInToGetTokens.called).to.equal(false);
+      expect(instance.remove.calledOnce).to.equal(true);
+      expect(reloadStub.calledOnce).to.equal(true);
+    });
+
+    it('stays anonymous when Okta needs user input', async () => {
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const { instance } = stubWidget(fresh, sinon.stub().resolves({ status: 'PENDING' }));
+
+      await fresh.loadIms();
+      await until(() => instance.remove.called);
+
+      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+      expect(reloadStub.called).to.equal(false);
+    });
+
+    it('stays anonymous when the exchange is rejected', async () => {
+      stubFetch({ exchangeOk: false });
+      const { fresh, reloadStub } = await freshModule();
+      const { instance } = stubWidget(fresh, success());
+
+      await fresh.loadIms();
+      await until(() => instance.remove.called);
+
+      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+      expect(reloadStub.called).to.equal(false);
+    });
+
+    it('stays anonymous when the widget throws', async () => {
+      stubFetch();
+      const { fresh, reloadStub } = await freshModule();
+      const { instance } = stubWidget(fresh, sinon.stub().rejects(new Error('boom')));
+
+      await fresh.loadIms();
+      await until(() => instance.remove.called);
+
+      expect(localStorage.getItem(STORAGE_KEY)).to.equal(null);
+      expect(reloadStub.called).to.equal(false);
+    });
+
+    it('does nothing when the widget config is unavailable', async () => {
+      window.fetch = async () => ({ ok: false });
+      const { fresh } = await freshModule();
+      const { loadWidget } = stubWidget(fresh, success());
+
+      await fresh.loadIms();
+      await new Promise((r) => { setTimeout(r, 30); });
+
+      expect(loadWidget.called).to.equal(false);
+    });
+
+    it('only tries once per tab', async () => {
+      stubFetch();
+      const first = await freshModule();
+      const { instance } = stubWidget(first.fresh, sinon.stub().resolves({ status: 'PENDING' }));
+      await first.fresh.loadIms();
+      await until(() => instance.remove.called);
+
+      const second = await freshModule();
+      const { loadWidget } = stubWidget(second.fresh, success());
+      await second.fresh.loadIms();
+      await new Promise((r) => { setTimeout(r, 30); });
+
+      expect(loadWidget.called).to.equal(false);
+    });
+
+    it('does not sign back in after an explicit sign-out', async () => {
+      localStorage.setItem(SIGNED_OUT_KEY, true);
+      stubFetch();
+      const { fresh } = await freshModule();
+      const { loadWidget } = stubWidget(fresh, success());
+
+      await fresh.loadIms();
+      await new Promise((r) => { setTimeout(r, 30); });
+
+      expect(loadWidget.called).to.equal(false);
+    });
+
+    it('does not run when a valid token is already stored', async () => {
+      storeRawToken(makeSiteToken(Math.floor(Date.now() / 1000) + 3600, 'a@b.c'), Math.floor(Date.now() / 1000) + 3600);
+      stubFetch();
+      const { fresh } = await freshModule();
+      const { loadWidget } = stubWidget(fresh, success());
+
+      await fresh.loadIms();
+      await new Promise((r) => { setTimeout(r, 30); });
+
+      expect(loadWidget.called).to.equal(false);
     });
   });
 });
