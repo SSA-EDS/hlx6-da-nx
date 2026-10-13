@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'da-lit';
 import { loadStyle } from '../../../utils/utils.js';
-import { loadIms } from '../../../utils/ims.js';
+import { loadIdentity } from '../utils/identity.js';
 import { getConfig } from '../../../scripts/nx.js';
 
 const styles = await loadStyle(import.meta.url);
@@ -12,7 +12,7 @@ class NxChatWelcome extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.shadowRoot.adoptedStyleSheets = [styles];
-    loadIms().then(({ first_name: firstName, displayName }) => {
+    loadIdentity().then(({ first_name: firstName, displayName }) => {
       this._firstName = firstName ?? displayName?.split(' ')[0];
       this.requestUpdate();
     });
